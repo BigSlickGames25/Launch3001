@@ -7,6 +7,11 @@ export class UI {
     this.status = document.getElementById("status");
     this.gyroPad = document.getElementById("gyroPad");
     this.gyroBall = document.getElementById("gyroBall");
+    this.mobileControls = document.getElementById("mobileControls");
+    this.joystickWrap = document.getElementById("joystickWrap");
+    this.joystickPad = document.getElementById("joystickPad");
+    this.joystickStick = document.getElementById("joystickStick");
+    this.btnBoost = document.getElementById("btnBoost");
 
     this.settingsMenu = document.getElementById("settingsMenu");
     this.btnMenu = document.getElementById("btnMenu");
@@ -25,6 +30,8 @@ export class UI {
 
     this._statusTimer = 0;
     this._statusBase = "READY";
+    this.setJoystickVisible(false);
+    this.setBoostActive(false);
   }
 
   setStatus(text, mode = "info") {
@@ -50,7 +57,12 @@ export class UI {
   }
 
   setSteerMode(mode) {
-    this.btnSteer.textContent = `Steering: ${mode === "TABLETOP" ? "Tabletop" : "Upright"}`;
+    const label =
+      mode === "TABLETOP" ? "Tabletop" :
+      mode === "JOYSTICK" ? "Joystick" :
+      "Upright";
+    this.btnSteer.textContent = `Steering: ${label}`;
+    this.setJoystickVisible(mode === "JOYSTICK");
   }
 
   setInvertLR(enabled) {
@@ -73,6 +85,31 @@ export class UI {
 
     this.gyroBall.style.transform = `translate(calc(-50% + ${dx.toFixed(1)}px), calc(-50% + ${dy.toFixed(1)}px))`;
     this.gyroBall.style.boxShadow = `0 0 ${10 + Math.round(mag * 14)}px rgba(0,255,255,0.9)`;
+  }
+
+  setJoystickVisible(visible) {
+    if (!this.joystickWrap) return;
+    this.joystickWrap.classList.toggle("hidden", !visible);
+  }
+
+  setJoystickStick(x, y) {
+    if (!this.joystickPad || !this.joystickStick) return;
+
+    const cx = Math.max(-1, Math.min(1, x || 0));
+    const cy = Math.max(-1, Math.min(1, y || 0));
+    const radius = Math.max(14, (Math.min(this.joystickPad.clientWidth, this.joystickPad.clientHeight) * 0.5) - 26);
+    const dx = cx * radius;
+    const dy = cy * radius;
+    const mag = Math.min(1, Math.hypot(cx, cy));
+
+    this.joystickStick.style.transform = `translate(calc(-50% + ${dx.toFixed(1)}px), calc(-50% + ${dy.toFixed(1)}px))`;
+    this.joystickPad.classList.toggle("active", mag > 0.03);
+  }
+
+  setBoostActive(active) {
+    if (!this.btnBoost) return;
+    this.btnBoost.classList.toggle("active", !!active);
+    this.btnBoost.setAttribute("aria-pressed", active ? "true" : "false");
   }
 
   toggleMenu(force) {

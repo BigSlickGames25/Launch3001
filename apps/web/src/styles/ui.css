@@ -37,7 +37,7 @@ html, body {
   display: grid;
   grid-template-columns: 1fr 1.2fr auto;
   gap: 10px;
-  pointer-events: none; /* allow tap thrust anywhere */
+  pointer-events: none;
 }
 #hud > div{
   background: var(--glass);
@@ -226,24 +226,242 @@ button:active{ transform: scale(0.98); }
   margin: 0;
 }
 
-#touchHint{
-  position:absolute;
-  bottom: calc(14px + var(--safe-bottom));
-  left: 50%;
-  transform: translateX(-50%);
-  padding: 10px 14px;
-  border-radius: 999px;
-  background: rgba(0,0,0,0.35);
-  border: 1px solid var(--line);
-  color: var(--text);
-  font-weight: 800;
-  letter-spacing: 0.5px;
-  user-select: none;
+.control-cluster.hidden{
+  display: none;
+}
+
+#mobileControls{
+  position: absolute;
+  left: calc(12px + var(--safe-left));
+  right: calc(12px + var(--safe-right));
+  bottom: calc(12px + var(--safe-bottom));
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 14px;
+  z-index: 28;
   pointer-events: none;
+}
+
+.control-cluster{
+  pointer-events: auto;
+  display: grid;
+  gap: 8px;
+  justify-items: center;
+}
+
+.control-label{
+  color: rgba(215,255,255,0.85);
+  font-weight: 900;
+  letter-spacing: 1.1px;
+  font-size: 11px;
+  text-shadow: 0 0 10px rgba(0,255,255,0.2);
+}
+
+.joystick-pad{
+  position: relative;
+  width: 132px;
+  height: 132px;
+  border-radius: 50%;
+  border: 1px solid rgba(0,255,255,0.22);
+  background:
+    radial-gradient(circle at 50% 48%, rgba(0,255,255,0.08), rgba(0,0,0,0.18) 58%, rgba(0,0,0,0.3) 100%),
+    linear-gradient(180deg, rgba(12,20,34,0.78), rgba(7,10,16,0.78));
+  box-shadow:
+    inset 0 0 24px rgba(0,255,255,0.08),
+    0 0 26px rgba(0,0,0,0.22);
+  touch-action: none;
+  user-select: none;
+}
+
+.joystick-grid,
+.joystick-ring{
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  pointer-events: none;
+}
+
+.joystick-grid::before,
+.joystick-grid::after{
+  content: "";
+  position: absolute;
+  background: rgba(0,255,255,0.13);
+}
+
+.joystick-grid::before{
+  left: 14px;
+  right: 14px;
+  top: 50%;
+  height: 1px;
+  transform: translateY(-50%);
+}
+
+.joystick-grid::after{
+  top: 14px;
+  bottom: 14px;
+  left: 50%;
+  width: 1px;
+  transform: translateX(-50%);
+}
+
+.joystick-ring{
+  inset: 14px;
+  border: 1px solid rgba(0,255,255,0.15);
+  box-shadow: inset 0 0 18px rgba(0,255,255,0.04);
+}
+
+.joystick-pad.active{
+  box-shadow:
+    inset 0 0 28px rgba(0,255,255,0.12),
+    0 0 20px rgba(0,255,255,0.12),
+    0 0 36px rgba(0,0,0,0.24);
+}
+
+.joystick-stick{
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  border: 1px solid rgba(255,255,255,0.28);
+  background:
+    radial-gradient(circle at 35% 30%, rgba(220,255,255,0.96), rgba(85,255,255,0.76) 36%, rgba(0,190,255,0.48) 68%, rgba(0,80,120,0.55) 100%);
+  box-shadow:
+    inset 0 -4px 10px rgba(0,0,0,0.25),
+    0 0 18px rgba(0,255,255,0.35);
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+
+.boost-cluster{
+  justify-items: center;
+}
+
+.boost-btn{
+  position: relative;
+  width: 132px;
+  height: 132px;
+  margin: 0;
+  padding: 0;
+  border-radius: 50%;
+  border: 1px solid rgba(255,170,80,0.32);
+  background:
+    radial-gradient(circle at 50% 68%, rgba(255,120,20,0.26), rgba(255,40,0,0.08) 52%, rgba(4,6,10,0.62) 100%),
+    linear-gradient(180deg, rgba(25,14,12,0.86), rgba(9,10,14,0.86));
+  box-shadow:
+    inset 0 0 22px rgba(255,120,20,0.12),
+    0 0 22px rgba(255,90,20,0.12),
+    0 0 36px rgba(0,0,0,0.24);
+  overflow: hidden;
+  touch-action: none;
+}
+
+.boost-shell,
+.boost-core{
+  position: absolute;
+  border-radius: 50%;
+  pointer-events: none;
+}
+
+.boost-shell{
+  inset: 16px;
+  background:
+    radial-gradient(circle at 50% 68%, rgba(255,150,40,0.18), rgba(255,85,0,0.1) 44%, rgba(0,0,0,0) 72%),
+    radial-gradient(circle at 50% 84%, rgba(255,180,70,0.12), rgba(0,0,0,0) 60%);
+  border: 1px solid rgba(255,170,90,0.18);
+}
+
+.boost-core{
+  inset: 30px;
+  background:
+    radial-gradient(circle at 50% 18%, rgba(190,255,255,0.95), rgba(120,235,255,0.82) 20%, rgba(120,235,255,0.08) 32%, rgba(0,0,0,0) 34%),
+    radial-gradient(ellipse at 50% 62%, rgba(255,240,150,0.95), rgba(255,170,45,0.92) 28%, rgba(255,95,10,0.86) 54%, rgba(170,30,0,0.3) 76%, rgba(0,0,0,0) 84%);
+  filter: saturate(1.2);
+  opacity: 0.72;
+  transform: translateY(2px) scale(0.96);
+}
+
+.boost-btn::before{
+  content: "";
+  position: absolute;
+  inset: 8px;
+  border-radius: 50%;
+  border: 1px solid rgba(255,210,130,0.08);
+  box-shadow: inset 0 0 14px rgba(255,160,70,0.06);
+}
+
+.boost-btn::after{
+  content: "";
+  position: absolute;
+  left: 28px;
+  right: 28px;
+  bottom: 16px;
+  height: 30px;
+  border-radius: 50%;
+  background: radial-gradient(ellipse at 50% 50%, rgba(255,120,20,0.28), rgba(255,80,0,0.06) 70%, rgba(0,0,0,0) 100%);
+  opacity: 0.4;
+  pointer-events: none;
+}
+
+.boost-text{
+  position: absolute;
+  inset: auto 0 14px 0;
+  text-align: center;
+  color: rgba(255,244,230,0.94);
+  font-weight: 900;
+  letter-spacing: 1.2px;
+  font-size: 13px;
+  text-shadow:
+    0 0 10px rgba(255,145,35,0.45),
+    0 0 4px rgba(0,0,0,0.65);
+  pointer-events: none;
+}
+
+.boost-btn.active{
+  border-color: rgba(255,184,92,0.56);
+  box-shadow:
+    inset 0 0 28px rgba(255,135,20,0.18),
+    0 0 28px rgba(255,120,20,0.28),
+    0 0 56px rgba(255,90,20,0.16);
+}
+
+.boost-btn.active .boost-core{
+  opacity: 0.98;
+  animation: boostFlameFlicker 90ms linear infinite alternate;
+}
+
+.boost-btn.active .boost-shell{
+  animation: boostHaloPulse 220ms ease-in-out infinite alternate;
+}
+
+.boost-btn.active .boost-text{
+  color: rgba(255,250,240,1);
+  text-shadow:
+    0 0 14px rgba(255,180,70,0.8),
+    0 0 24px rgba(255,100,20,0.35);
+}
+
+@keyframes boostFlameFlicker{
+  from{ transform: translateY(1px) scale(0.97); filter: saturate(1.15) brightness(1.0); }
+  to{ transform: translateY(-1px) scale(1.02); filter: saturate(1.3) brightness(1.15); }
+}
+
+@keyframes boostHaloPulse{
+  from{ opacity: 0.72; transform: scale(0.99); }
+  to{ opacity: 0.95; transform: scale(1.02); }
 }
 
 /* Rotation-friendly: in landscape, compress HUD */
 @media (orientation: landscape){
   #hud{ grid-template-columns: 1fr 1fr 1fr; }
-  #touchHint{ bottom: calc(10px + var(--safe-bottom)); }
+  #mobileControls{
+    left: calc(10px + var(--safe-left));
+    right: calc(10px + var(--safe-right));
+    bottom: calc(10px + var(--safe-bottom));
+  }
+  .joystick-pad,
+  .boost-btn{ width: 118px; height: 118px; }
+  .joystick-stick{ width: 38px; height: 38px; }
 }

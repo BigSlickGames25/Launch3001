@@ -8,9 +8,14 @@ export class World {
     this._craters = [];
     this._mountains = [];
     this._chasms = [];
+    this._centerSpires = [];
+    this._tunnelGates = [];
+    this._tunnelCollisionBoxes = [];
     this._terrainPeakY = 0;
     this._routePeakY = 0;
+    this._tunnelOpeningTopY = 0;
     this._flightCeilingY = 12;
+    this._canyonHazeBaseOpacity = 0.08;
 
     const hemi = new THREE.HemisphereLight(0x99cfff, 0x0f0818, 0.95);
     this.group.add(hemi);
@@ -43,13 +48,19 @@ export class World {
     this.terrain = this._createTerrain();
     this.group.add(this.terrain);
 
-    this.launchPad = this._createPad(0x00ffff);
+    this.canyonRim = this._createCanyonRim();
+    this.group.add(this.canyonRim);
+
+    this.routeFeatures = new THREE.Group();
+    this.group.add(this.routeFeatures);
+
+    this.launchPad = this._createLaunchPad();
     this.launchPad.position.set(-10, 0.5, 0);
     this.launchPad.castShadow = true;
     this.launchPad.receiveShadow = true;
     this.group.add(this.launchPad);
 
-    this.landingPad = this._createPad(0x00ff88);
+    this.landingPad = this._createLandingPad();
     this.landingPad.position.set(12, 0.5, 0);
     this.landingPad.castShadow = true;
     this.landingPad.receiveShadow = true;
@@ -59,7 +70,7 @@ export class World {
     this.launchGlow.position.set(this.launchPad.position.x, 2.8, this.launchPad.position.z);
     this.group.add(this.launchGlow);
 
-    this.landingGlow = new THREE.PointLight(0x00ff88, 2.0, 24, 2);
+    this.landingGlow = new THREE.PointLight(0xffcf45, 2.2, 24, 2);
     this.landingGlow.position.set(this.landingPad.position.x, 2.8, this.landingPad.position.z);
     this.group.add(this.landingGlow);
 
@@ -94,10 +105,19 @@ export class World {
       mountainIntrusion: 0,
       mountainRadiusMin: 1.5,
       mountainRadiusMax: 3.0,
+      centerSpireCount: 0,
+      centerSpireHeight: 0,
+      centerSpireRadiusMin: 0.9,
+      centerSpireRadiusMax: 1.8,
       chasmCount: 0,
       chasmDepth: 0,
       chasmWidthX: 1.0,
       chasmWidthZ: 4.0,
+      tunnelGateCount: 0,
+      tunnelGapWidth: 3.2,
+      tunnelGapHeight: 3.6,
+      tunnelDepth: 1.1,
+      tunnelFrameThickness: 0.45,
       terrainMinClamp: -2.8,
       terrainMaxClamp: 4.8
     });
@@ -224,16 +244,252 @@ export class World {
     return terrainGroup;
   }
 
-  _createPad(color) {
-    const g = new THREE.BoxGeometry(3, 1, 3);
-    const m = new THREE.MeshStandardMaterial({
-      color,
-      emissive: color,
-      emissiveIntensity: 0.25,
-      metalness: 0.5,
-      roughness: 0.2
+  _padAdd(parent, geometry, material, x, y, z, rx = 0, ry = 0, rz = 0) {
+    const mesh = new THREE.Mesh(geometry, material);
+    mesh.position.set(x, y, z);
+    mesh.rotation.set(rx, ry, rz);
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
+    parent.add(mesh);
+    return mesh;
+  }
+
+  _createLaunchPad() {
+    const group = new THREE.Group();
+
+    const hull = new THREE.MeshStandardMaterial({
+      color: 0x2c3138,
+      emissive: 0x080a10,
+      emissiveIntensity: 0.08,
+      metalness: 0.36,
+      roughness: 0.72
     });
-    return new THREE.Mesh(g, m);
+    const deck = new THREE.MeshStandardMaterial({
+      color: 0x474f58,
+      emissive: 0x080c13,
+      emissiveIntensity: 0.08,
+      metalness: 0.22,
+      roughness: 0.84
+    });
+    const trim = new THREE.MeshStandardMaterial({
+      color: 0x6af8ff,
+      emissive: 0x0b4252,
+      emissiveIntensity: 0.65,
+      metalness: 0.3,
+      roughness: 0.26
+    });
+    const caution = new THREE.MeshStandardMaterial({
+      color: 0xd7b05f,
+      emissive: 0x2e1f08,
+      emissiveIntensity: 0.2,
+      metalness: 0.22,
+      roughness: 0.42
+    });
+
+    this._padAdd(group, new THREE.CylinderGeometry(1.52, 1.45, 0.86, 8), hull, 0, -0.07, 0);
+    this._padAdd(group, new THREE.CylinderGeometry(1.42, 1.42, 0.12, 8), deck, 0, 0.44, 0);
+    this._padAdd(group, new THREE.CylinderGeometry(1.15, 1.15, 0.04, 8), deck, 0, 0.49, 0);
+
+    const trenchRing = this._padAdd(
+      group,
+      new THREE.TorusGeometry(1.05, 0.03, 10, 48),
+      trim,
+      0,
+      0.505,
+      0,
+      Math.PI / 2,
+      0,
+      0
+    );
+    trenchRing.receiveShadow = false;
+
+    const railGeom = new THREE.BoxGeometry(0.14, 0.06, 1.1);
+    for (let i = 0; i < 4; i++) {
+      const a = (i / 4) * Math.PI * 2;
+      const x = Math.cos(a) * 0.72;
+      const z = Math.sin(a) * 0.72;
+      const rail = this._padAdd(group, railGeom, trim, x, 0.505, z, 0, a, 0);
+      rail.receiveShadow = false;
+    }
+
+    const pylonGeom = new THREE.BoxGeometry(0.14, 0.44, 0.14);
+    const pylonCapGeom = new THREE.BoxGeometry(0.22, 0.06, 0.22);
+    for (let i = 0; i < 8; i++) {
+      const a = (i / 8) * Math.PI * 2 + Math.PI / 8;
+      const r = 1.2;
+      const x = Math.cos(a) * r;
+      const z = Math.sin(a) * r;
+      this._padAdd(group, pylonGeom, hull, x, 0.74, z);
+      this._padAdd(group, pylonCapGeom, caution, x, 0.99, z);
+    }
+
+    // Imperial-style docking braces / gantries
+    for (const side of [-1, 1]) {
+      const gx = side * 0.88;
+      this._padAdd(group, new THREE.BoxGeometry(0.12, 0.9, 0.12), hull, gx, 0.95, 0);
+      this._padAdd(group, new THREE.BoxGeometry(0.12, 0.72, 0.12), hull, gx * 0.86, 0.82, 0.52);
+      this._padAdd(group, new THREE.BoxGeometry(0.12, 0.72, 0.12), hull, gx * 0.86, 0.82, -0.52);
+      this._padAdd(group, new THREE.BoxGeometry(0.22, 0.08, 1.14), hull, gx * 0.93, 1.34, 0);
+
+      const lamp = this._padAdd(group, new THREE.BoxGeometry(0.06, 0.06, 0.9), trim, gx * 0.93, 1.29, 0);
+      lamp.receiveShadow = false;
+    }
+
+    return group;
+  }
+
+  _createLandingPad() {
+    const group = new THREE.Group();
+
+    const base = new THREE.MeshStandardMaterial({
+      color: 0x343b45,
+      emissive: 0x080a10,
+      emissiveIntensity: 0.08,
+      metalness: 0.28,
+      roughness: 0.78
+    });
+    const yellow = new THREE.MeshStandardMaterial({
+      color: 0xffd347,
+      emissive: 0x473208,
+      emissiveIntensity: 0.25,
+      metalness: 0.2,
+      roughness: 0.34
+    });
+    const black = new THREE.MeshStandardMaterial({
+      color: 0x0f1116,
+      emissive: 0x050608,
+      emissiveIntensity: 0.04,
+      metalness: 0.32,
+      roughness: 0.58
+    });
+
+    this._padAdd(group, new THREE.CylinderGeometry(1.5, 1.42, 0.9, 32), base, 0, -0.05, 0);
+    this._padAdd(group, new THREE.CylinderGeometry(1.42, 1.42, 0.08, 32), yellow, 0, 0.46, 0);
+    this._padAdd(group, new THREE.CylinderGeometry(1.14, 1.14, 0.03, 32), base, 0, 0.495, 0);
+
+    const ring = this._padAdd(
+      group,
+      new THREE.TorusGeometry(1.31, 0.04, 12, 64),
+      yellow,
+      0,
+      0.505,
+      0,
+      Math.PI / 2
+    );
+    ring.receiveShadow = false;
+
+    // Black warning stripes around the edge (scaled with pad size because they are children of the pad group).
+    const stripeGeom = new THREE.BoxGeometry(0.12, 0.035, 0.36);
+    for (let i = 0; i < 20; i++) {
+      const a = (i / 20) * Math.PI * 2;
+      const x = Math.cos(a) * 1.3;
+      const z = Math.sin(a) * 1.3;
+      const stripe = this._padAdd(group, stripeGeom, black, x, 0.51, z, 0, a, 0);
+      stripe.receiveShadow = false;
+    }
+
+    const centerMark = this._padAdd(group, new THREE.RingGeometry(0.58, 0.72, 32), black, 0, 0.514, 0, -Math.PI / 2);
+    centerMark.receiveShadow = false;
+    const hBarA = this._padAdd(group, new THREE.BoxGeometry(0.15, 0.02, 0.85), black, 0, 0.515, 0);
+    hBarA.receiveShadow = false;
+    const hBarB = this._padAdd(group, new THREE.BoxGeometry(0.75, 0.02, 0.14), black, 0, 0.515, 0);
+    hBarB.receiveShadow = false;
+
+    return group;
+  }
+
+  _createCanyonRim() {
+    const group = new THREE.Group();
+    const rockMat = new THREE.MeshStandardMaterial({
+      color: 0x50555d,
+      emissive: 0x090b0f,
+      emissiveIntensity: 0.06,
+      metalness: 0.02,
+      roughness: 0.98
+    });
+    const capMat = new THREE.MeshStandardMaterial({
+      color: 0x6a717b,
+      emissive: 0x0b0d12,
+      emissiveIntensity: 0.06,
+      metalness: 0.02,
+      roughness: 0.94
+    });
+    const glowMat = new THREE.MeshBasicMaterial({
+      color: 0x334455,
+      transparent: true,
+      opacity: 0.08,
+      depthWrite: false
+    });
+
+    this.canyonRockMat = rockMat;
+    this.canyonCapMat = capMat;
+    this.canyonRimGroup = group;
+
+    const addRock = (geom, mat, x, y, z, rx = 0, ry = 0, rz = 0, sx = 1, sy = 1, sz = 1) => {
+      const mesh = new THREE.Mesh(geom, mat);
+      mesh.position.set(x, y, z);
+      mesh.rotation.set(rx, ry, rz);
+      mesh.scale.set(sx, sy, sz);
+      mesh.castShadow = true;
+      mesh.receiveShadow = true;
+      group.add(mesh);
+      return mesh;
+    };
+
+    const rand = this._randFactory(74021);
+    const sideDepthBase = 4.8;
+    const sideZBase = 24.0;
+    for (const sign of [-1, 1]) {
+      for (let i = 0; i < 18; i++) {
+        const x = -40 + i * 4.8 + (rand() - 0.5) * 2.2;
+        const w = 3.2 + rand() * 3.6;
+        const h = 6.0 + rand() * 7.0 + (i % 3 === 0 ? 2.0 : 0);
+        const d = sideDepthBase + rand() * 3.6;
+        const z = sign * (sideZBase + rand() * 2.8);
+        const y = h * 0.5 - 0.3;
+        const rotY = (rand() - 0.5) * 0.14;
+        addRock(new THREE.BoxGeometry(w, h, d), rockMat, x, y, z, (rand() - 0.5) * 0.08, rotY, (rand() - 0.5) * 0.08);
+
+        if (rand() > 0.35) {
+          const mesa = addRock(
+            new THREE.DodecahedronGeometry(1, 0),
+            capMat,
+            x + (rand() - 0.5) * 1.6,
+            y + h * 0.45 + 1.2 + rand() * 1.4,
+            z + (rand() - 0.5) * 1.6,
+            rand() * Math.PI,
+            rand() * Math.PI,
+            rand() * Math.PI,
+            1.0 + rand() * 1.4,
+            0.8 + rand() * 1.6,
+            1.0 + rand() * 1.5
+          );
+          mesa.castShadow = true;
+        }
+      }
+    }
+
+    // End walls to complete the canyon enclosure.
+    for (const sign of [-1, 1]) {
+      for (let i = 0; i < 6; i++) {
+        const z = -18 + i * 7.2 + (rand() - 0.5) * 1.5;
+        const w = 4.8 + rand() * 3.2;
+        const h = 6.5 + rand() * 8.0;
+        const d = 3.0 + rand() * 3.4;
+        const x = sign * (45.0 + rand() * 3.0);
+        addRock(new THREE.BoxGeometry(d, h, w), rockMat, x, h * 0.5 - 0.5, z, (rand() - 0.5) * 0.06, (rand() - 0.5) * 0.1, (rand() - 0.5) * 0.06);
+      }
+    }
+
+    // Low atmospheric floor haze to blend the canyon walls into the scene.
+    const haze = new THREE.Mesh(new THREE.RingGeometry(28, 56, 96), glowMat);
+    haze.rotation.x = -Math.PI / 2;
+    haze.position.y = 0.08;
+    haze.receiveShadow = false;
+    group.add(haze);
+    this.canyonHaze = haze;
+
+    return group;
   }
 
   _createRoof() {
@@ -281,11 +537,15 @@ export class World {
   _generateHazards(profile) {
     this._mountains = [];
     this._chasms = [];
+    this._centerSpires = [];
+    this._tunnelGates = [];
+    this._tunnelCollisionBoxes = [];
 
     const rand = this._randFactory((profile.terrainSeed || 1) * 97 + 13);
     const routeMinX = this.launchPad.position.x + 3.5;
     const routeMaxX = this.landingPad.position.x - 1.2;
     const corridorHalf = Math.max(1.5, profile.corridorHalfWidth ?? 4.5);
+    const usableHalf = Math.max(0.9, corridorHalf - 0.5);
 
     const mountainCount = Math.max(0, profile.mountainCount || 0);
     for (let i = 0; i < mountainCount; i++) {
@@ -313,6 +573,49 @@ export class World {
       const rim = depth * 0.12;
       this._chasms.push({ x, z, rx, rz, depth, rim });
     }
+
+    const centerSpireCount = Math.max(0, profile.centerSpireCount || 0);
+    for (let i = 0; i < centerSpireCount; i++) {
+      const t = (i + 1) / (centerSpireCount + 1);
+      const x = routeMinX + (routeMaxX - routeMinX) * t + (rand() - 0.5) * 1.8;
+      const z = (rand() - 0.5) * Math.min(usableHalf * 1.2, 2.6);
+      const rx = (profile.centerSpireRadiusMin || 1.0) + rand() * ((profile.centerSpireRadiusMax || 2.0) - (profile.centerSpireRadiusMin || 1.0));
+      const rz = rx * (0.8 + rand() * 0.6);
+      const h = (profile.centerSpireHeight || 0) * (0.82 + rand() * 0.45);
+      this._centerSpires.push({ x, z, rx, rz, h });
+    }
+
+    const tunnelGateCount = Math.max(0, profile.tunnelGateCount || 0);
+    for (let i = 0; i < tunnelGateCount; i++) {
+      const t = (i + 1) / (tunnelGateCount + 1);
+      const x = routeMinX + (routeMaxX - routeMinX) * t + (rand() - 0.5) * 1.4;
+      const z = (rand() - 0.5) * Math.min(usableHalf * 0.9, 1.9);
+      const openW = (profile.tunnelGapWidth || 3.0) * (0.92 + rand() * 0.16);
+      const openH = (profile.tunnelGapHeight || 3.4) * (0.94 + rand() * 0.12);
+      const depth = (profile.tunnelDepth || 1.1) * (0.9 + rand() * 0.2);
+      const frameThickness = (profile.tunnelFrameThickness || 0.45) * (0.92 + rand() * 0.18);
+      this._tunnelGates.push({ x, z, openW, openH, depth, frameThickness });
+    }
+  }
+
+  _routeFeatureDeltaAt(x, z) {
+    let y = 0;
+
+    for (const s of this._centerSpires) {
+      const dx = (x - s.x) / s.rx;
+      const dz = (z - s.z) / s.rz;
+      const q = dx * dx + dz * dz;
+      if (q < 8) {
+        y += Math.exp(-q) * s.h;
+
+        // Sharpen the silhouette slightly so the center feels more like rock spires than smooth hills.
+        if (q < 2.4) {
+          y += Math.exp(-q * 1.8) * s.h * 0.35;
+        }
+      }
+    }
+
+    return y;
   }
 
   _terrainHeightRaw(x, z) {
@@ -403,6 +706,8 @@ export class World {
       }
     }
 
+    y += this._routeFeatureDeltaAt(x, z);
+
     const minClamp = p.terrainMinClamp ?? -2.8;
     const maxClamp = p.terrainMaxClamp ?? 4.8;
     return Math.max(minClamp, Math.min(maxClamp, y));
@@ -429,10 +734,19 @@ export class World {
       mountainIntrusion: level.mountainIntrusion ?? 0.4,
       mountainRadiusMin: level.mountainRadiusMin ?? 1.4,
       mountainRadiusMax: level.mountainRadiusMax ?? 3.1,
+      centerSpireCount: level.centerSpireCount ?? 0,
+      centerSpireHeight: level.centerSpireHeight ?? 0,
+      centerSpireRadiusMin: level.centerSpireRadiusMin ?? 0.9,
+      centerSpireRadiusMax: level.centerSpireRadiusMax ?? 1.8,
       chasmCount: level.chasmCount ?? 0,
       chasmDepth: level.chasmDepth ?? 0,
       chasmWidthX: level.chasmWidthX ?? 1.1,
       chasmWidthZ: level.chasmWidthZ ?? 4.4,
+      tunnelGateCount: level.tunnelGateCount ?? 0,
+      tunnelGapWidth: level.tunnelGapWidth ?? 3.2,
+      tunnelGapHeight: level.tunnelGapHeight ?? 3.5,
+      tunnelDepth: level.tunnelDepth ?? 1.1,
+      tunnelFrameThickness: level.tunnelFrameThickness ?? 0.45,
       terrainMinClamp: level.terrainMinClamp ?? -2.8,
       terrainMaxClamp: level.terrainMaxClamp ?? 4.8
     };
@@ -470,6 +784,158 @@ export class World {
       0.31 + moonShade * 0.09
     );
     this.terrainWire.material.opacity = 0.06 + moonShade * 0.1;
+    if (this.canyonRockMat) {
+      this.canyonRockMat.color.setRGB(
+        0.22 + moonShade * 0.1,
+        0.23 + moonShade * 0.1,
+        0.26 + moonShade * 0.12
+      );
+    }
+    if (this.canyonCapMat) {
+      this.canyonCapMat.color.setRGB(
+        0.34 + moonShade * 0.12,
+        0.36 + moonShade * 0.12,
+        0.40 + moonShade * 0.14
+      );
+    }
+    if (this.canyonHaze) {
+      this._canyonHazeBaseOpacity = 0.05 + moonShade * 0.06;
+      this.canyonHaze.material.opacity = this._canyonHazeBaseOpacity;
+    }
+
+    this._rebuildRouteFeatures();
+  }
+
+  _disposeNode(node) {
+    if (!node) return;
+    if (node.geometry) node.geometry.dispose?.();
+    if (Array.isArray(node.material)) {
+      for (const m of node.material) m?.dispose?.();
+    } else {
+      node.material?.dispose?.();
+    }
+  }
+
+  _clearRouteFeatures() {
+    if (!this.routeFeatures) return;
+    this.routeFeatures.traverse((node) => {
+      if (node.isMesh) this._disposeNode(node);
+    });
+    this.routeFeatures.clear();
+    this._tunnelCollisionBoxes = [];
+    this._tunnelOpeningTopY = 0;
+  }
+
+  _pushTunnelCollisionBox(cx, cy, cz, sx, sy, sz) {
+    this._tunnelCollisionBoxes.push({
+      minX: cx - sx * 0.5,
+      maxX: cx + sx * 0.5,
+      minY: cy - sy * 0.5,
+      maxY: cy + sy * 0.5,
+      minZ: cz - sz * 0.5,
+      maxZ: cz + sz * 0.5
+    });
+  }
+
+  _rebuildRouteFeatures() {
+    this._clearRouteFeatures();
+    if (!this._tunnelGates.length) return;
+
+    const rockMat = new THREE.MeshStandardMaterial({
+      color: 0x62666f,
+      emissive: 0x090b10,
+      emissiveIntensity: 0.08,
+      metalness: 0.02,
+      roughness: 0.96
+    });
+    const trimMat = new THREE.MeshStandardMaterial({
+      color: 0x89f6ff,
+      emissive: 0x083e48,
+      emissiveIntensity: 0.4,
+      metalness: 0.22,
+      roughness: 0.35
+    });
+    const glowMat = new THREE.MeshBasicMaterial({
+      color: 0x79f2ff,
+      transparent: true,
+      opacity: 0.22,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending
+    });
+
+    for (const gate of this._tunnelGates) {
+      const gateGroup = new THREE.Group();
+
+      const baseY = this.groundHeightAt(gate.x, gate.z) - 0.02;
+      const frameT = Math.max(0.3, gate.frameThickness);
+      const depth = Math.max(0.8, gate.depth);
+      const openW = Math.max(1.7, gate.openW);
+      const openH = Math.max(2.0, gate.openH);
+      const beamH = Math.max(0.34, frameT * 1.15);
+      const openingFloorY = baseY + 0.45;
+      const beamBottomY = openingFloorY + openH;
+      this._tunnelOpeningTopY = Math.max(this._tunnelOpeningTopY, beamBottomY);
+      const topBeamCenterY = beamBottomY + beamH * 0.5;
+      const postHeight = Math.max(1.1, beamBottomY - baseY);
+      const postCenterY = baseY + postHeight * 0.5;
+      const postOffsetX = openW * 0.5 + frameT * 0.5;
+      const capWidth = openW + frameT * 2;
+
+      const leftPost = new THREE.Mesh(new THREE.BoxGeometry(frameT, postHeight, depth), rockMat);
+      leftPost.position.set(gate.x - postOffsetX, postCenterY, gate.z);
+      leftPost.castShadow = true;
+      leftPost.receiveShadow = true;
+      gateGroup.add(leftPost);
+      this._pushTunnelCollisionBox(leftPost.position.x, leftPost.position.y, leftPost.position.z, frameT, postHeight, depth);
+
+      const rightPost = new THREE.Mesh(new THREE.BoxGeometry(frameT, postHeight, depth), rockMat);
+      rightPost.position.set(gate.x + postOffsetX, postCenterY, gate.z);
+      rightPost.castShadow = true;
+      rightPost.receiveShadow = true;
+      gateGroup.add(rightPost);
+      this._pushTunnelCollisionBox(rightPost.position.x, rightPost.position.y, rightPost.position.z, frameT, postHeight, depth);
+
+      const topBeam = new THREE.Mesh(new THREE.BoxGeometry(capWidth, beamH, depth), rockMat);
+      topBeam.position.set(gate.x, topBeamCenterY, gate.z);
+      topBeam.castShadow = true;
+      topBeam.receiveShadow = true;
+      gateGroup.add(topBeam);
+      this._pushTunnelCollisionBox(topBeam.position.x, topBeam.position.y, topBeam.position.z, capWidth, beamH, depth);
+
+      // Thin illuminated trim around the opening makes the tunnel readable on fast approaches.
+      const trimT = Math.max(0.04, frameT * 0.16);
+      const trimDepth = Math.max(0.02, depth * 0.72);
+      const trimZ = gate.z + depth * 0.02;
+      const leftTrim = new THREE.Mesh(new THREE.BoxGeometry(trimT, openH, trimDepth), trimMat);
+      leftTrim.position.set(gate.x - openW * 0.5, openingFloorY + openH * 0.5, trimZ);
+      leftTrim.castShadow = false;
+      gateGroup.add(leftTrim);
+
+      const rightTrim = new THREE.Mesh(new THREE.BoxGeometry(trimT, openH, trimDepth), trimMat);
+      rightTrim.position.set(gate.x + openW * 0.5, openingFloorY + openH * 0.5, trimZ);
+      rightTrim.castShadow = false;
+      gateGroup.add(rightTrim);
+
+      const topTrim = new THREE.Mesh(new THREE.BoxGeometry(openW, trimT, trimDepth), trimMat);
+      topTrim.position.set(gate.x, openingFloorY + openH, trimZ);
+      topTrim.castShadow = false;
+      gateGroup.add(topTrim);
+
+      const glowPanel = new THREE.Mesh(new THREE.PlaneGeometry(openW * 0.92, openH * 0.92), glowMat);
+      glowPanel.position.set(gate.x, openingFloorY + openH * 0.5, gate.z + depth * 0.51);
+      glowPanel.castShadow = false;
+      glowPanel.receiveShadow = false;
+      gateGroup.add(glowPanel);
+
+      this.routeFeatures.add(gateGroup);
+    }
+  }
+
+  _sphereHitsBox(pos, radius, box) {
+    const dx = Math.max(box.minX - pos.x, 0, pos.x - box.maxX);
+    const dy = Math.max(box.minY - pos.y, 0, pos.y - box.maxY);
+    const dz = Math.max(box.minZ - pos.z, 0, pos.z - box.maxZ);
+    return (dx * dx + dy * dy + dz * dz) <= radius * radius;
   }
 
   applyLevel(level) {
@@ -487,11 +953,22 @@ export class World {
 
     const ceilingMargin = level.ceilingMargin ?? 3;
     const minCeilingY = this.launchPadTopY() + 4.8;
-    this._flightCeilingY = Math.max(minCeilingY, this._routePeakY + ceilingMargin);
+    this._flightCeilingY = Math.max(
+      minCeilingY,
+      this._routePeakY + ceilingMargin,
+      this._tunnelOpeningTopY + 1.0
+    );
   }
 
   groundHeightAt(x, z) {
     return this._terrainHeightAt(x, z);
+  }
+
+  checkTunnelCollision(pos, radius = 0.38) {
+    for (const box of this._tunnelCollisionBoxes) {
+      if (this._sphereHitsBox(pos, radius, box)) return true;
+    }
+    return false;
   }
 
   flightCeilingY() {
@@ -556,5 +1033,11 @@ export class World {
 
     this.launchGlow.intensity = 2.2 + Math.sin(this._time * 2.2) * 0.35;
     this.landingGlow.intensity = 1.9 + Math.sin(this._time * 1.7 + 0.9) * 0.3;
+
+    if (this.canyonHaze) {
+      const base = this._canyonHazeBaseOpacity ?? 0.08;
+      this.canyonHaze.material.opacity = Math.max(0.02, base + Math.sin(this._time * 0.45) * 0.01);
+      this.canyonHaze.rotation.z = Math.sin(this._time * 0.08) * 0.015;
+    }
   }
 }

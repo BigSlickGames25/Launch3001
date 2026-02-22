@@ -39,7 +39,7 @@ export class Game {
     this.score = 0;
     this.best = Number(localStorage.getItem("launcher_best") || "0");
     this.state = "READY";
-    this.sensitivityScale = 1.0;
+    this.sensitivityScale = 1.8;
     this.gravityScale = 1.0;
     this._ceilingWarnCooldown = 0;
 
@@ -69,7 +69,7 @@ export class Game {
     });
 
     this.ui.sensRange.addEventListener("input", (e) => {
-      const nextScale = clamp(Number(e.target.value) / 100, 0.35, 1.0);
+      const nextScale = clamp(Number(e.target.value) / 100, 0.25, 2.6);
       this.sensitivityScale = nextScale;
       this.input.setSensitivityScale(nextScale);
       this.ui.setSensitivityScale(nextScale);
@@ -151,6 +151,11 @@ export class Game {
       }
 
       const groundY = this.world.groundHeightAt(this.rocket.pos.x, this.rocket.pos.z);
+
+      if (this.world.checkTunnelCollision(this.rocket.pos, 0.42)) {
+        this.crash("TUNNEL HIT");
+        return;
+      }
 
       const launchPadTop = this.world.launchPadTopY();
       const onLaunchArea = this.world.isOverLaunchPad(this.rocket.pos) && (this.rocket.pos.y <= launchPadTop + 0.7);

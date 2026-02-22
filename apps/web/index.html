@@ -52,9 +52,9 @@
       <div class="slider-group">
         <div class="slider-row">
           <span>Sensitivity</span>
-          <span id="sensValue">100%</span>
+          <span id="sensValue">180%</span>
         </div>
-        <input id="sensRange" type="range" min="35" max="100" step="5" value="100" />
+        <input id="sensRange" type="range" min="25" max="260" step="5" value="180" />
       </div>
       <div class="slider-group">
         <div class="slider-row">
@@ -68,8 +68,25 @@
       <div id="pcHint" class="hint">PC: Space thrust - A/D steer - W/S pitch</div>
     </div>
 
-    <!-- Touch hint -->
-    <div id="touchHint">Hold anywhere to THRUST (or press Space)</div>
+    <div id="mobileControls" aria-label="Touch controls">
+      <div id="joystickWrap" class="control-cluster hidden">
+        <div class="control-label">STEER</div>
+        <div id="joystickPad" class="joystick-pad" aria-label="Virtual joystick">
+          <div class="joystick-grid"></div>
+          <div class="joystick-ring"></div>
+          <div id="joystickStick" class="joystick-stick"></div>
+        </div>
+      </div>
+
+      <div class="control-cluster boost-cluster">
+        <div class="control-label">BOOST</div>
+        <button id="btnBoost" class="boost-btn" aria-label="Boost">
+          <span class="boost-shell"></span>
+          <span class="boost-core"></span>
+          <span class="boost-text">BOOST</span>
+        </button>
+      </div>
+    </div>
   </div>
 
   <script type="module" src="/src/main.js"></script>

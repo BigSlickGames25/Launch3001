@@ -10,6 +10,7 @@ export class Rocket {
     this._time = 0;
     this._thrustVisual = 0;
     this.visualTilt = { x: 0, z: 0 };
+    this.navBeacons = [];
 
     this._buildRocket();
     this._buildFlames();
@@ -75,6 +76,23 @@ export class Rocket {
       roughness: 0.08,
       transparent: true,
       opacity: 0.9
+    });
+    const amber = this._matStandard({
+      color: 0xffcf68,
+      emissive: 0x4f3108,
+      emissiveIntensity: 0.35,
+      metalness: 0.2,
+      roughness: 0.3
+    });
+    const beaconMatA = new THREE.MeshBasicMaterial({
+      color: 0xff8d3a,
+      transparent: true,
+      opacity: 0.4
+    });
+    const beaconMatB = new THREE.MeshBasicMaterial({
+      color: 0x6cf6ff,
+      transparent: true,
+      opacity: 0.35
     });
 
     this._addMesh(
@@ -170,6 +188,122 @@ export class Rocket {
       strut.rotation.z = 0.28 * Math.cos(a);
       strut.rotation.x = 0.28 * Math.sin(a);
     }
+
+    // Side booster pods + struts for a denser silhouette.
+    for (const side of [-1, 1]) {
+      const x = side * 0.47;
+      this._addMesh(
+        this.visual,
+        new THREE.CylinderGeometry(0.085, 0.11, 0.92, 14),
+        darkMetal,
+        new THREE.Vector3(x, 0.9, 0)
+      );
+      this._addMesh(
+        this.visual,
+        new THREE.ConeGeometry(0.085, 0.22, 14),
+        hullMat,
+        new THREE.Vector3(x, 1.47, 0)
+      );
+      this._addMesh(
+        this.visual,
+        new THREE.CylinderGeometry(0.05, 0.04, 0.12, 12),
+        accentCyan,
+        new THREE.Vector3(x, 1.18, 0.07 * side),
+        new THREE.Euler(Math.PI / 2, 0, 0)
+      );
+      this._addMesh(
+        this.visual,
+        new THREE.CylinderGeometry(0.04, 0.065, 0.16, 12),
+        darkMetal,
+        new THREE.Vector3(x, 0.32, 0)
+      );
+
+      for (const by of [0.58, 1.08]) {
+        const brace = this._addMesh(
+          this.visual,
+          new THREE.CylinderGeometry(0.01, 0.01, 0.34, 8),
+          hullMat,
+          new THREE.Vector3(side * 0.26, by, 0)
+        );
+        brace.rotation.z = side * 0.95;
+      }
+    }
+
+    // Landing legs / feet.
+    for (let i = 0; i < 4; i++) {
+      const a = (i / 4) * Math.PI * 2 + Math.PI / 4;
+      const x = Math.cos(a) * 0.2;
+      const z = Math.sin(a) * 0.2;
+      const leg = this._addMesh(
+        this.visual,
+        new THREE.CylinderGeometry(0.012, 0.018, 0.62, 8),
+        darkMetal,
+        new THREE.Vector3(x, -0.18, z)
+      );
+      leg.rotation.z = 0.62 * Math.cos(a);
+      leg.rotation.x = 0.62 * Math.sin(a);
+
+      const foot = this._addMesh(
+        this.visual,
+        new THREE.CylinderGeometry(0.055, 0.065, 0.028, 12),
+        amber,
+        new THREE.Vector3(Math.cos(a) * 0.42, -0.46, Math.sin(a) * 0.42)
+      );
+      foot.receiveShadow = true;
+    }
+
+    // Upper-body panel ribs and greebles.
+    const ribGeom = new THREE.BoxGeometry(0.028, 0.56, 0.08);
+    for (let i = 0; i < 6; i++) {
+      const a = (i / 6) * Math.PI * 2;
+      const r = 0.31;
+      const rib = this._addMesh(
+        this.visual,
+        ribGeom,
+        i % 2 ? hullMat : darkMetal,
+        new THREE.Vector3(Math.cos(a) * r, 1.32, Math.sin(a) * r)
+      );
+      rib.lookAt(Math.cos(a) * 2, 1.32, Math.sin(a) * 2);
+    }
+
+    this._addMesh(this.visual, new THREE.BoxGeometry(0.18, 0.06, 0.1), darkMetal, new THREE.Vector3(0, 1.62, -0.21));
+    this._addMesh(this.visual, new THREE.BoxGeometry(0.14, 0.05, 0.08), accentMagenta, new THREE.Vector3(0.12, 1.34, -0.2));
+    this._addMesh(this.visual, new THREE.BoxGeometry(0.14, 0.05, 0.08), accentCyan, new THREE.Vector3(-0.12, 1.24, -0.2));
+
+    // RCS pods near the nose.
+    for (const side of [-1, 1]) {
+      const rcs = this._addMesh(
+        this.visual,
+        new THREE.CylinderGeometry(0.022, 0.022, 0.18, 10),
+        darkMetal,
+        new THREE.Vector3(side * 0.22, 1.86, -0.03),
+        new THREE.Euler(0, 0, Math.PI / 2)
+      );
+      rcs.receiveShadow = false;
+      this._addMesh(
+        this.visual,
+        new THREE.CylinderGeometry(0.012, 0.018, 0.035, 8),
+        amber,
+        new THREE.Vector3(side * 0.31, 1.86, -0.03),
+        new THREE.Euler(0, 0, Math.PI / 2)
+      );
+    }
+
+    // Antenna cluster and blinking beacons.
+    this._addMesh(this.visual, new THREE.CylinderGeometry(0.006, 0.006, 0.32, 6), darkMetal, new THREE.Vector3(0, 2.38, -0.02));
+    this._addMesh(this.visual, new THREE.CylinderGeometry(0.004, 0.004, 0.18, 6), darkMetal, new THREE.Vector3(0.05, 2.28, -0.04), null, null);
+
+    const beaconTop = this._addMesh(this.visual, new THREE.SphereGeometry(0.035, 10, 8), beaconMatA, new THREE.Vector3(0, 2.56, 0));
+    const beaconLeft = this._addMesh(this.visual, new THREE.SphereGeometry(0.026, 10, 8), beaconMatB, new THREE.Vector3(-0.36, 1.0, 0.18));
+    const beaconRight = this._addMesh(this.visual, new THREE.SphereGeometry(0.026, 10, 8), beaconMatB, new THREE.Vector3(0.36, 1.0, 0.18));
+    beaconTop.castShadow = false;
+    beaconLeft.castShadow = false;
+    beaconRight.castShadow = false;
+    this.navBeacons.push(
+      { mesh: beaconTop, base: 0.35, amp: 0.65, speed: 7.2, phase: 0.0 },
+      { mesh: beaconLeft, base: 0.18, amp: 0.4, speed: 4.2, phase: 1.1 },
+      { mesh: beaconRight, base: 0.18, amp: 0.4, speed: 4.2, phase: 2.4 }
+    );
   }
 
   _buildFlames() {
@@ -363,6 +497,12 @@ export class Rocket {
 
     this.exhaustLight.intensity = thrust * (2.2 + Math.sin(this._time * 52) * 0.25);
     this.exhaustLight.distance = 8 + thrust * 10;
+
+    for (const b of this.navBeacons) {
+      const pulse = b.base + (0.5 + 0.5 * Math.sin(this._time * b.speed + b.phase)) * b.amp;
+      b.mesh.material.opacity = pulse;
+      b.mesh.scale.setScalar(0.9 + pulse * 0.18);
+    }
   }
 
   getMetrics() {

@@ -41,6 +41,7 @@ export class Game {
     this.state = "READY";
     this.sensitivityScale = 1.0;
     this.gravityScale = 1.0;
+    this._ceilingWarnCooldown = 0;
 
     this._bindUI();
     this.input.setSensitivityScale(this.sensitivityScale);
@@ -111,6 +112,7 @@ export class Game {
     this.state = "READY";
     this.rocket.reset(this.world.spawn);
     this.input.clearThrustState();
+    this._ceilingWarnCooldown = 0;
   }
 
   nextLevel() {
@@ -124,6 +126,7 @@ export class Game {
 
   update(dt) {
     this.input.update(dt);
+    this._ceilingWarnCooldown = Math.max(0, this._ceilingWarnCooldown - dt);
 
     if (this.state === "READY" && (this.input.thrustHeld || Math.abs(this.input.tilt.x) > 0.05)) {
       this.state = "FLYING";
@@ -133,11 +136,21 @@ export class Game {
     if (this.state === "FLYING") {
       this.physics.apply(this.rocket, this.input, dt);
 
-      const groundY = this.world.groundHeightAt(this.rocket.pos.x, this.rocket.pos.z);
-
-      if (this.world.checkRoofCollision(this.rocket.pos)) {
-        this.crash("ROOF HIT");
+      const ceilingY = this.world.flightCeilingY();
+      const rocketTopOffset = 0.9;
+      if (this.rocket.pos.y > ceilingY - rocketTopOffset) {
+        this.rocket.pos.y = ceilingY - rocketTopOffset;
+        if (this.rocket.vel.y > 0) this.rocket.vel.y *= -0.08;
+        this.rocket.vel.y = Math.min(this.rocket.vel.y, 0);
+        this.rocket.vel.x *= 0.985;
+        this.rocket.vel.z *= 0.985;
+        if (this._ceilingWarnCooldown <= 0) {
+          this.ui.setStatus("ALT LIMIT", "warn");
+          this._ceilingWarnCooldown = 0.45;
+        }
       }
+
+      const groundY = this.world.groundHeightAt(this.rocket.pos.x, this.rocket.pos.z);
 
       const launchPadTop = this.world.launchPadTopY();
       const onLaunchArea = this.world.isOverLaunchPad(this.rocket.pos) && (this.rocket.pos.y <= launchPadTop + 0.7);

@@ -6,6 +6,11 @@ export class World {
     this._time = 0;
     this._terrainProfile = null;
     this._craters = [];
+    this._mountains = [];
+    this._chasms = [];
+    this._terrainPeakY = 0;
+    this._routePeakY = 0;
+    this._flightCeilingY = 12;
 
     const hemi = new THREE.HemisphereLight(0x99cfff, 0x0f0818, 0.95);
     this.group.add(hemi);
@@ -82,7 +87,19 @@ export class World {
       craterRadiusMax: 2.8,
       craterRim: 0,
       terrainSeed: 1,
-      corridorHalfWidth: 6
+      corridorHalfWidth: 6,
+      corridorFlattenStrength: 1,
+      mountainCount: 0,
+      mountainHeight: 0,
+      mountainIntrusion: 0,
+      mountainRadiusMin: 1.5,
+      mountainRadiusMax: 3.0,
+      chasmCount: 0,
+      chasmDepth: 0,
+      chasmWidthX: 1.0,
+      chasmWidthZ: 4.0,
+      terrainMinClamp: -2.8,
+      terrainMaxClamp: 4.8
     });
   }
 
@@ -261,10 +278,52 @@ export class World {
     }
   }
 
+  _generateHazards(profile) {
+    this._mountains = [];
+    this._chasms = [];
+
+    const rand = this._randFactory((profile.terrainSeed || 1) * 97 + 13);
+    const routeMinX = this.launchPad.position.x + 3.5;
+    const routeMaxX = this.landingPad.position.x - 1.2;
+    const corridorHalf = Math.max(1.5, profile.corridorHalfWidth ?? 4.5);
+
+    const mountainCount = Math.max(0, profile.mountainCount || 0);
+    for (let i = 0; i < mountainCount; i++) {
+      const t = (i + 1) / (mountainCount + 1);
+      const x = routeMinX + (routeMaxX - routeMinX) * t + (rand() - 0.5) * 1.8;
+      const side = ((i + (profile.terrainSeed || 1)) % 2 === 0) ? 1 : -1;
+      const intrude = Math.max(0, Math.min(1, profile.mountainIntrusion ?? 0.4));
+      const laneBase = corridorHalf * (0.75 - intrude * 0.55);
+      const z = side * (laneBase + (rand() - 0.5) * Math.max(0.6, corridorHalf * 0.45));
+      const rx = (profile.mountainRadiusMin || 1.5) + rand() * ((profile.mountainRadiusMax || 3.0) - (profile.mountainRadiusMin || 1.5));
+      const rz = rx * (0.75 + rand() * 0.75);
+      const h = (profile.mountainHeight || 0) * (0.8 + rand() * 0.55);
+      this._mountains.push({ x, z, rx, rz, h });
+    }
+
+    const chasmCount = Math.max(0, profile.chasmCount || 0);
+    for (let i = 0; i < chasmCount; i++) {
+      const t = (i + 1) / (chasmCount + 1);
+      const x = routeMinX + (routeMaxX - routeMinX) * t + (rand() - 0.5) * 2.2;
+      const side = ((i + (profile.terrainSeed || 1)) % 2 === 0) ? -1 : 1;
+      const z = side * corridorHalf * (0.15 + rand() * 0.45);
+      const rx = (profile.chasmWidthX || 1.0) * (0.8 + rand() * 0.6);
+      const rz = (profile.chasmWidthZ || 4.0) * (0.85 + rand() * 0.55);
+      const depth = (profile.chasmDepth || 0) * (0.8 + rand() * 0.45);
+      const rim = depth * 0.12;
+      this._chasms.push({ x, z, rx, rz, depth, rim });
+    }
+  }
+
   _terrainHeightRaw(x, z) {
     const p = this._terrainProfile;
     if (!p) return 0;
-    if (p.terrainAmp <= 0 && p.craterCount <= 0) return 0;
+    if (
+      p.terrainAmp <= 0 &&
+      p.craterCount <= 0 &&
+      (p.mountainCount || 0) <= 0 &&
+      (p.chasmCount || 0) <= 0
+    ) return 0;
 
     let y = 0;
     const seed = p.terrainSeed || 1;
@@ -287,6 +346,27 @@ export class World {
         }
         const rimFalloff = (d - 1.02) / 0.22;
         y += Math.exp(-(rimFalloff * rimFalloff)) * c.rim;
+      }
+    }
+
+    for (const m of this._mountains) {
+      const dx = (x - m.x) / m.rx;
+      const dz = (z - m.z) / m.rz;
+      const q = dx * dx + dz * dz;
+      if (q < 7) {
+        y += Math.exp(-q) * m.h;
+      }
+    }
+
+    for (const c of this._chasms) {
+      const dx = (x - c.x) / c.rx;
+      const dz = (z - c.z) / c.rz;
+      const q = dx * dx + dz * dz;
+      if (q < 8) {
+        y -= Math.exp(-q) * c.depth;
+        const rimDist = Math.sqrt(q);
+        const rimBand = (rimDist - 1.08) / 0.28;
+        y += Math.exp(-(rimBand * rimBand)) * c.rim;
       }
     }
 
@@ -317,11 +397,15 @@ export class World {
       const az = Math.abs(z);
       if (az < corridorHalf + 1.2) {
         const t = this._smoothstep(corridorHalf, corridorHalf + 1.2, az);
-        y *= t;
+        const flattenStrength = Math.max(0, Math.min(1, p.corridorFlattenStrength ?? 1));
+        const flattened = y * t;
+        y += (flattened - y) * flattenStrength;
       }
     }
 
-    return Math.max(-2.8, Math.min(4.8, y));
+    const minClamp = p.terrainMinClamp ?? -2.8;
+    const maxClamp = p.terrainMaxClamp ?? 4.8;
+    return Math.max(minClamp, Math.min(maxClamp, y));
   }
 
   _applyTerrainProfile(level) {
@@ -338,19 +422,45 @@ export class World {
       craterRadiusMax: level.craterRadiusMax ?? 3.0,
       craterRim: level.craterRim ?? 0,
       terrainSeed: level.terrainSeed ?? 1,
-      corridorHalfWidth: level.corridorHalfWidth ?? 4.5
+      corridorHalfWidth: level.corridorHalfWidth ?? 4.5,
+      corridorFlattenStrength: level.corridorFlattenStrength ?? 1,
+      mountainCount: level.mountainCount ?? 0,
+      mountainHeight: level.mountainHeight ?? 0,
+      mountainIntrusion: level.mountainIntrusion ?? 0.4,
+      mountainRadiusMin: level.mountainRadiusMin ?? 1.4,
+      mountainRadiusMax: level.mountainRadiusMax ?? 3.1,
+      chasmCount: level.chasmCount ?? 0,
+      chasmDepth: level.chasmDepth ?? 0,
+      chasmWidthX: level.chasmWidthX ?? 1.1,
+      chasmWidthZ: level.chasmWidthZ ?? 4.4,
+      terrainMinClamp: level.terrainMinClamp ?? -2.8,
+      terrainMaxClamp: level.terrainMaxClamp ?? 4.8
     };
 
     this._generateCraters(this._terrainProfile);
+    this._generateHazards(this._terrainProfile);
 
     const pos = this.terrainGeom.attributes.position;
+    let terrainPeakY = -Infinity;
+    let routePeakY = -Infinity;
     for (let i = 0; i < pos.count; i++) {
       const x = pos.getX(i);
       const z = pos.getZ(i);
-      pos.setY(i, this._terrainHeightAt(x, z));
+      const y = this._terrainHeightAt(x, z);
+      pos.setY(i, y);
+      if (y > terrainPeakY) terrainPeakY = y;
+      if (
+        x >= this.launchPad.position.x - 2 &&
+        x <= this.landingPad.position.x + 4 &&
+        Math.abs(z) <= 11
+      ) {
+        routePeakY = Math.max(routePeakY, y);
+      }
     }
     pos.needsUpdate = true;
     this.terrainGeom.computeVertexNormals();
+    this._terrainPeakY = Number.isFinite(terrainPeakY) ? terrainPeakY : 0;
+    this._routePeakY = Number.isFinite(routePeakY) ? routePeakY : this._terrainPeakY;
 
     const amp = this._terrainProfile.terrainAmp;
     const moonShade = Math.max(0, Math.min(1, amp / 2.8));
@@ -371,15 +481,21 @@ export class World {
     this.launchPadHalf = launchSize / 2;
     this.landingPadHalf = landingSize / 2;
 
-    this.roof.visible = !!level.roof;
-    this.roof.position.y = level.roofHeight ?? 7.0;
-    this.roof.scale.set(level.roofScaleX ?? 1, 1, level.roofScaleZ ?? 1);
+    this.roof.visible = false;
 
     this._applyTerrainProfile(level);
+
+    const ceilingMargin = level.ceilingMargin ?? 3;
+    const minCeilingY = this.launchPadTopY() + 4.8;
+    this._flightCeilingY = Math.max(minCeilingY, this._routePeakY + ceilingMargin);
   }
 
   groundHeightAt(x, z) {
     return this._terrainHeightAt(x, z);
+  }
+
+  flightCeilingY() {
+    return this._flightCeilingY;
   }
 
   checkRoofCollision(pos) {

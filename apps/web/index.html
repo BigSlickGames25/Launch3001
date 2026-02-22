@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no" />
+  <title>LAUNCHER – Neon Lander 3D</title>
+  <link rel="stylesheet" href="/src/styles/ui.css" />
+</head>
+<body>
+  <div id="app">
+    <canvas id="c"></canvas>
+
+    <!-- Console UI -->
+    <div id="hud">
+      <div class="left">
+        <div class="row"><span class="k">LVL</span> <span id="lvl">1</span></div>
+        <div class="row"><span class="k">SCORE</span> <span id="score">0</span></div>
+        <div class="row"><span class="k">BEST</span> <span id="best">0</span></div>
+      </div>
+
+      <div class="center">
+        <div id="status" class="status">READY</div>
+        <div class="mini">
+          <div><span class="k">ALT</span> <span id="alt">0.0</span></div>
+          <div><span class="k">VSPD</span> <span id="vspd">0.0</span></div>
+          <div><span class="k">HSPD</span> <span id="hspd">0.0</span></div>
+          <div><span class="k">ANG</span> <span id="ang">0</span>°</div>
+        </div>
+      </div>
+
+      <div class="right">
+        <button id="btnMotion">Enable Tilt</button>
+        <button id="btnCal">Calibrate</button>
+        <button id="btnCam">Cam: Chase</button>
+        <button id="btnReset">Reset</button>
+      </div>
+    </div>
+
+    <!-- Touch hint -->
+    <div id="touchHint">Hold anywhere to THRUST</div>
+  </div>
+
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>

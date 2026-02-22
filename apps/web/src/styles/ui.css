@@ -1,0 +1,80 @@
+:root{
+  --safe-top: env(safe-area-inset-top);
+  --safe-right: env(safe-area-inset-right);
+  --safe-bottom: env(safe-area-inset-bottom);
+  --safe-left: env(safe-area-inset-left);
+  --glass: rgba(10, 12, 20, 0.55);
+  --line: rgba(0,255,255,0.25);
+  --text: rgba(220,255,255,0.95);
+  --muted: rgba(160,220,220,0.75);
+  --warn: rgba(255, 90, 90, 0.95);
+  --ok: rgba(80, 255, 160, 0.95);
+  --neon: rgba(0,255,255,0.9);
+  font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+}
+html, body { margin: 0; padding: 0; height: 100%; background: #05060a; overflow: hidden; }
+#app { position: relative; height: 100%; width: 100%; }
+#c { display: block; width: 100%; height: 100%; touch-action: none; }
+
+#hud{
+  position: absolute;
+  top: calc(10px + var(--safe-top));
+  left: calc(10px + var(--safe-left));
+  right: calc(10px + var(--safe-right));
+  display: grid;
+  grid-template-columns: 1fr 1.2fr 1fr;
+  gap: 10px;
+  pointer-events: none; /* allow tap thrust anywhere */
+}
+#hud > div{
+  background: var(--glass);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 10px;
+  backdrop-filter: blur(8px);
+  box-shadow: 0 0 20px rgba(0,255,255,0.08);
+  pointer-events: auto; /* buttons clickable */
+}
+.row{ display:flex; justify-content:space-between; color: var(--text); font-weight: 700; letter-spacing: 0.5px; }
+.k{ color: var(--muted); font-weight: 800; }
+.status{
+  font-weight: 900;
+  letter-spacing: 1px;
+  color: var(--neon);
+  margin-bottom: 6px;
+}
+.mini{ display:grid; grid-template-columns: 1fr 1fr; gap: 6px; color: var(--text); font-weight: 700; }
+
+button{
+  width: 100%;
+  border: 1px solid var(--line);
+  background: rgba(0,0,0,0.25);
+  color: var(--text);
+  border-radius: 12px;
+  padding: 10px 12px;
+  font-weight: 800;
+  margin: 5px 0;
+}
+button:active{ transform: scale(0.98); }
+
+#touchHint{
+  position:absolute;
+  bottom: calc(14px + var(--safe-bottom));
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 10px 14px;
+  border-radius: 999px;
+  background: rgba(0,0,0,0.35);
+  border: 1px solid var(--line);
+  color: var(--text);
+  font-weight: 800;
+  letter-spacing: 0.5px;
+  user-select: none;
+  pointer-events: none;
+}
+
+/* Rotation-friendly: in landscape, compress HUD */
+@media (orientation: landscape){
+  #hud{ grid-template-columns: 1fr 1fr 1fr; }
+  #touchHint{ bottom: calc(10px + var(--safe-bottom)); }
+}

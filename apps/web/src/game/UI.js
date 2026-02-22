@@ -1,0 +1,49 @@
+export class UI {
+  constructor() {
+    this.lvl = document.getElementById("lvl");
+    this.score = document.getElementById("score");
+    this.best = document.getElementById("best");
+
+    this.alt = document.getElementById("alt");
+    this.vspd = document.getElementById("vspd");
+    this.hspd = document.getElementById("hspd");
+    this.ang = document.getElementById("ang");
+
+    this.status = document.getElementById("status");
+
+    this.btnMotion = document.getElementById("btnMotion");
+    this.btnCal = document.getElementById("btnCal");
+    this.btnCam = document.getElementById("btnCam");
+    this.btnReset = document.getElementById("btnReset");
+
+    this._statusTimer = 0;
+    this._statusBase = "READY";
+  }
+
+  setStatus(text, mode = "info") {
+    this._statusBase = text;
+    this.status.textContent = text;
+    this.status.style.color =
+      mode === "warn" ? "rgba(255,90,90,0.95)" :
+      mode === "ok" ? "rgba(80,255,160,0.95)" :
+      "rgba(0,255,255,0.9)";
+    this._statusTimer = 1.2;
+  }
+
+  update(dt, data) {
+    if (this._statusTimer > 0) {
+      this._statusTimer -= dt;
+      if (this._statusTimer <= 0) this.status.textContent = this._statusBase;
+    }
+
+    if (!data) return;
+    this.lvl.textContent = data.level;
+    this.score.textContent = data.score;
+    this.best.textContent = data.best;
+
+    this.alt.textContent = data.alt.toFixed(1);
+    this.vspd.textContent = data.vspd.toFixed(1);
+    this.hspd.textContent = data.hspd.toFixed(1);
+    this.ang.textContent = String(Math.round(data.ang));
+  }
+}

@@ -29,3 +29,17 @@ Health:
 Scores:
 - GET http://localhost:8080/api/scores
 - POST http://localhost:8080/api/scores  { "name":"Brent", "score":1234, "level":7 }
+
+## GitHub Pages (No Workflow File)
+This repo now publishes from `main` -> `/docs` (no `.github/workflows/pages.yml`).
+
+To refresh the hosted site after web changes:
+```powershell
+cd apps/web
+$env:VITE_BASE_PATH='/Launch3001/'
+npm run build
+cd ..
+if (Test-Path ../docs) { Remove-Item ../docs -Recurse -Force }
+New-Item -ItemType Directory -Path ../docs | Out-Null
+Copy-Item dist/* ../docs -Recurse -Force
+```

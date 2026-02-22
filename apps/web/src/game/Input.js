@@ -17,6 +17,8 @@ export class Input {
     this.tiltRate = 14;
     this.sensitivityScale = 1.0;
     this.keyboardAxisStrength = 0.9;
+    this.deadzone = { x: 0.08, y: 0.06 };
+    this.responseExpo = { x: 1.55, y: 1.35 };
     this._hasMotionSample = false;
     this.steerMode = localStorage.getItem("launcher_steer_mode") === "TABLETOP" ? "TABLETOP" : "UPRIGHT";
     this.invertLR = localStorage.getItem("launcher_invert_lr") === "1";
@@ -110,6 +112,16 @@ export class Input {
 
   setSensitivityScale(scale) {
     this.sensitivityScale = clamp(scale, 0.35, 1.4);
+  }
+
+  _shapeAxis(v, deadzone, expo, maxMag = 1.2) {
+    const sign = v < 0 ? -1 : 1;
+    const mag = Math.min(Math.abs(v), maxMag);
+    if (mag <= deadzone) return 0;
+
+    const norm = (mag - deadzone) / (maxMag - deadzone);
+    const shaped = Math.pow(norm, expo) * maxMag;
+    return shaped * sign;
   }
 
   _bindButtons() {
@@ -247,18 +259,18 @@ export class Input {
     const xAxis = (this.invertLR ? -1 : 1) * xAxisBase;
     const yAxis = (this.invertFB ? -1 : 1) * yAxisBase;
 
-    const tx = clamp(
-      xAxis * this.sensitivityScale,
-      -1.2,
-      1.2
-    );
-    const ty = clamp(
-      yAxis * this.sensitivityScale,
-      -1.2,
-      1.2
-    );
+    const shapedX = this._shapeAxis(xAxis, this.deadzone.x, this.responseExpo.x);
+    const shapedY = this._shapeAxis(yAxis, this.deadzone.y, this.responseExpo.y);
 
-    this.tilt.x = smooth(this.tilt.x, tx, this.tiltRate, dt);
-    this.tilt.y = smooth(this.tilt.y, ty, this.tiltRate, dt);
+    const tx = clamp(shapedX * this.sensitivityScale, -1.2, 1.2);
+    const ty = clamp(shapedY * this.sensitivityScale, -1.2, 1.2);
+
+    const activeRate = this.steerMode === "TABLETOP" ? 10 : this.tiltRate;
+    const centerRate = this.steerMode === "TABLETOP" ? 14 : 18;
+    const xRate = Math.abs(tx) < 0.03 ? centerRate : activeRate;
+    const yRate = Math.abs(ty) < 0.03 ? centerRate : activeRate;
+
+    this.tilt.x = smooth(this.tilt.x, tx, xRate, dt);
+    this.tilt.y = smooth(this.tilt.y, ty, yRate, dt);
   }
 }

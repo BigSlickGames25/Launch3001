@@ -5,6 +5,12 @@ export class Physics {
     this.gravity = 9.8;
     this.wind = 0.0;
     this.maxSpeed = 25;
+    this.steerTargetSpeed = 7.2;
+    this.pitchTargetSpeed = 3.2;
+    this.steerResponse = 6.5;
+    this.pitchResponse = 5.8;
+    this.freeDriftDamping = 1.35;
+    this.thrustDriftDamping = 0.75;
 
     // landing tolerances
     this.maxVspd = 6.0;
@@ -13,19 +19,35 @@ export class Physics {
   }
 
   apply(rocket, input, dt) {
+    const steer = input.tilt.x;
+    const pitch = input.tilt.y;
+    const steerMag = Math.abs(steer);
+    const pitchMag = Math.abs(pitch);
+
     // Gravity
     rocket.vel.y -= this.gravity * dt;
 
-    // Wind drift
-    rocket.vel.x += (this.wind * 0.35) * dt;
+    // Wind acts like a baseline sideways drift the player trims against.
+    const windTargetX = this.wind * 1.15;
+    const targetVx = windTargetX + steer * this.steerTargetSpeed;
+    const targetVz = (-pitch) * this.pitchTargetSpeed;
 
-    // Steering from tilt
-    const steer = input.tilt.x;
-    rocket.vel.x += steer * rocket.steerAccel * dt;
+    const steerResponse = this.steerResponse + steerMag * 2.2;
+    const pitchResponse = this.pitchResponse + pitchMag * 1.5;
+    const steerBlend = 1 - Math.exp(-steerResponse * dt);
+    const pitchBlend = 1 - Math.exp(-pitchResponse * dt);
 
-    // Optional pitch affects z
-    const pitch = input.tilt.y;
-    rocket.vel.z += (-pitch) * rocket.steerAccel * 0.35 * dt;
+    rocket.vel.x += (targetVx - rocket.vel.x) * steerBlend;
+    rocket.vel.z += (targetVz - rocket.vel.z) * pitchBlend;
+
+    // Extra damping near center so the rocket settles instead of sliding forever.
+    const nearCenter = Math.max(0, 1 - Math.max(steerMag, pitchMag) / 0.18);
+    const damping = (input.thrustHeld ? this.thrustDriftDamping : this.freeDriftDamping) * nearCenter;
+    if (damping > 0) {
+      const drag = Math.exp(-damping * dt);
+      rocket.vel.x *= drag;
+      rocket.vel.z *= drag;
+    }
 
     // Thrust
     if (input.thrustHeld) {

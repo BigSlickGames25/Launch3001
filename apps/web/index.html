@@ -40,8 +40,20 @@
       </div>
       <button id="btnMotion">Enable Tilt</button>
       <button id="btnCal">Calibrate</button>
-      <button id="btnSens">Sensitivity: 100%</button>
-      <button id="btnGrav">Gravity: 100%</button>
+      <div class="slider-group">
+        <div class="slider-row">
+          <span>Sensitivity</span>
+          <span id="sensValue">100%</span>
+        </div>
+        <input id="sensRange" type="range" min="35" max="100" step="5" value="100" />
+      </div>
+      <div class="slider-group">
+        <div class="slider-row">
+          <span>Gravity</span>
+          <span id="gravValue">100%</span>
+        </div>
+        <input id="gravRange" type="range" min="40" max="100" step="5" value="100" />
+      </div>
       <button id="btnCam">Cam: Chase</button>
       <button id="btnReset">Reset</button>
       <div id="pcHint" class="hint">PC: Space thrust · A/D steer · W/S pitch</div>

@@ -16,8 +16,10 @@ export class UI {
     this.btnMenuClose = document.getElementById("btnMenuClose");
     this.btnMotion = document.getElementById("btnMotion");
     this.btnCal = document.getElementById("btnCal");
-    this.btnSens = document.getElementById("btnSens");
-    this.btnGrav = document.getElementById("btnGrav");
+    this.sensRange = document.getElementById("sensRange");
+    this.gravRange = document.getElementById("gravRange");
+    this.sensValue = document.getElementById("sensValue");
+    this.gravValue = document.getElementById("gravValue");
     this.btnCam = document.getElementById("btnCam");
     this.btnReset = document.getElementById("btnReset");
 
@@ -36,11 +38,15 @@ export class UI {
   }
 
   setSensitivityScale(scale) {
-    this.btnSens.textContent = `Sensitivity: ${Math.round(scale * 100)}%`;
+    const pct = Math.round(scale * 100);
+    this.sensValue.textContent = `${pct}%`;
+    this.sensRange.value = String(pct);
   }
 
   setGravityScale(scale) {
-    this.btnGrav.textContent = `Gravity: ${Math.round(scale * 100)}%`;
+    const pct = Math.round(scale * 100);
+    this.gravValue.textContent = `${pct}%`;
+    this.gravRange.value = String(pct);
   }
 
   toggleMenu(force) {

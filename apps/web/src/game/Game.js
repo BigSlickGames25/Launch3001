@@ -62,35 +62,20 @@ export class Game {
       this.ui.setStatus(`CAM ${this.camMode}`, "ok");
       this.ui.toggleMenu(false);
     });
-    this.ui.btnSens.addEventListener("click", () => {
-      this._cycleSensitivityDown();
-      this.ui.toggleMenu(false);
+
+    this.ui.sensRange.addEventListener("input", (e) => {
+      const nextScale = clamp(Number(e.target.value) / 100, 0.35, 1.0);
+      this.sensitivityScale = nextScale;
+      this.input.setSensitivityScale(nextScale);
+      this.ui.setSensitivityScale(nextScale);
     });
-    this.ui.btnGrav.addEventListener("click", () => {
-      this._cycleGravityDown();
-      this.ui.toggleMenu(false);
+
+    this.ui.gravRange.addEventListener("input", (e) => {
+      const nextScale = clamp(Number(e.target.value) / 100, 0.4, 1.0);
+      this.gravityScale = nextScale;
+      this.physics.gravity = LEVELS[this.levelIndex].gravity * nextScale;
+      this.ui.setGravityScale(nextScale);
     });
-  }
-
-  _nextStepDown(current) {
-    const steps = [1.0, 0.85, 0.7, 0.55, 0.4];
-    const idx = steps.findIndex((v) => Math.abs(v - current) < 0.001);
-    if (idx < 0) return steps[1];
-    return steps[(idx + 1) % steps.length];
-  }
-
-  _cycleSensitivityDown() {
-    this.sensitivityScale = this._nextStepDown(this.sensitivityScale);
-    this.input.setSensitivityScale(this.sensitivityScale);
-    this.ui.setSensitivityScale(this.sensitivityScale);
-    this.ui.setStatus(`SENS ${Math.round(this.sensitivityScale * 100)}%`, "ok");
-  }
-
-  _cycleGravityDown() {
-    this.gravityScale = this._nextStepDown(this.gravityScale);
-    this.physics.gravity = LEVELS[this.levelIndex].gravity * this.gravityScale;
-    this.ui.setGravityScale(this.gravityScale);
-    this.ui.setStatus(`GRAV ${Math.round(this.gravityScale * 100)}%`, "ok");
   }
 
   start() {

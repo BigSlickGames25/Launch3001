@@ -185,7 +185,7 @@ export class Input {
   update(dt) {
     const kx = (this.keys.right ? 1 : 0) - (this.keys.left ? 1 : 0);
     const ky = (this.keys.up ? 1 : 0) - (this.keys.down ? 1 : 0);
-    const xAxis = -(this.raw.x - this.bias.x + kx * this.keyboardAxisStrength);
+    const xAxis = this.raw.x - this.bias.x + kx * this.keyboardAxisStrength;
     const yAxis = this.raw.y - this.bias.y + ky * this.keyboardAxisStrength;
 
     const tx = clamp(

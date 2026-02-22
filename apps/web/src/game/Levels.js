@@ -1,7 +1,9 @@
-const TOTAL_LEVELS = 15;
+const TOTAL_LEVELS = 100;
+const TUNING_SPAN_LEVELS = 15;
 
 export const LEVELS = Array.from({ length: TOTAL_LEVELS }, (_, idx) => {
-  const t = idx / (TOTAL_LEVELS - 1);
+  const tunedIdx = Math.min(idx, TUNING_SPAN_LEVELS - 1);
+  const t = tunedIdx / (TUNING_SPAN_LEVELS - 1);
   const terrainAmp = idx === 0 ? 0 : Number((0.18 + idx * 0.17).toFixed(2));
   const craterCount = idx === 0 ? 0 : Math.min(6 + idx * 2, 28);
   const landingPadSize = idx < 10 ? 6.0 : Number(Math.max(2.4, 6.0 - (idx - 9) * 0.65).toFixed(2));

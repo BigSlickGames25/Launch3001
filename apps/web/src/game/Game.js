@@ -47,6 +47,7 @@ export class Game {
     this.input.setSensitivityScale(this.sensitivityScale);
     this.ui.setSensitivityScale(this.sensitivityScale);
     this.ui.setGravityScale(this.gravityScale);
+    this.ui.setLevelJumpBounds(Math.min(100, LEVELS.length));
     this._resize();
     window.addEventListener("resize", () => this._resize());
 
@@ -81,6 +82,23 @@ export class Game {
       this.physics.gravity = LEVELS[this.levelIndex].gravity * nextScale;
       this.ui.setGravityScale(nextScale);
     });
+
+    const loadSelectedLevel = () => {
+      const maxLevel = Math.min(100, LEVELS.length);
+      const raw = Number(this.ui.levelJumpInput?.value ?? (this.levelIndex + 1));
+      const levelNum = clamp(Math.round(Number.isFinite(raw) ? raw : 1), 1, maxLevel);
+      this.score = 0;
+      this.ui.setLevelJumpValue(levelNum);
+      this.loadLevel(levelNum - 1);
+      this.ui.toggleMenu(false);
+    };
+
+    this.ui.btnGoLevel?.addEventListener("click", loadSelectedLevel);
+    this.ui.levelJumpInput?.addEventListener("keydown", (e) => {
+      if (e.key !== "Enter") return;
+      e.preventDefault();
+      loadSelectedLevel();
+    });
   }
 
   start() {
@@ -104,6 +122,7 @@ export class Game {
 
     this.world.applyLevel(level);
     this.resetLevel();
+    this.ui.setLevelJumpValue(this.levelIndex + 1);
 
     this.ui.setStatus(`LEVEL ${this.levelIndex + 1}`, "ok");
   }
@@ -118,7 +137,7 @@ export class Game {
   nextLevel() {
     const next = this.levelIndex + 1;
     if (next >= LEVELS.length) {
-      this.ui.setStatus("YOU BEAT THE DEMO 😈", "ok");
+      this.ui.setStatus(`YOU CLEARED ${LEVELS.length}`, "ok");
       return;
     }
     this.loadLevel(next);

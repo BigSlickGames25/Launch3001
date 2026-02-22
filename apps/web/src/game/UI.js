@@ -26,6 +26,9 @@ export class UI {
     this.gravRange = document.getElementById("gravRange");
     this.sensValue = document.getElementById("sensValue");
     this.gravValue = document.getElementById("gravValue");
+    this.levelJumpInput = document.getElementById("levelJumpInput");
+    this.levelJumpMax = document.getElementById("levelJumpMax");
+    this.btnGoLevel = document.getElementById("btnGoLevel");
     this.btnCam = document.getElementById("btnCam");
     this.btnReset = document.getElementById("btnReset");
 
@@ -55,6 +58,22 @@ export class UI {
     const pct = Math.round(scale * 100);
     this.gravValue.textContent = `${pct}%`;
     this.gravRange.value = String(pct);
+  }
+
+  setLevelJumpBounds(maxLevel) {
+    const max = Math.max(1, maxLevel | 0);
+    if (this.levelJumpInput) {
+      this.levelJumpInput.min = "1";
+      this.levelJumpInput.max = String(max);
+    }
+    if (this.levelJumpMax) {
+      this.levelJumpMax.textContent = `Max ${max}`;
+    }
+  }
+
+  setLevelJumpValue(level) {
+    if (!this.levelJumpInput) return;
+    this.levelJumpInput.value = String(Math.max(1, level | 0));
   }
 
   setSteerMode(mode) {

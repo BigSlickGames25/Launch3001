@@ -64,6 +64,16 @@
         </div>
         <input id="gravRange" type="range" min="40" max="100" step="5" value="100" />
       </div>
+      <div class="level-jump-group">
+        <div class="slider-row">
+          <span>Test Level</span>
+          <span id="levelJumpMax">Max 100</span>
+        </div>
+        <div class="level-jump-row">
+          <input id="levelJumpInput" type="number" min="1" max="100" step="1" value="1" inputmode="numeric" />
+          <button id="btnGoLevel" type="button">Load</button>
+        </div>
+      </div>
       <button id="btnCam">Cam: Chase</button>
       <button id="btnReset">Reset</button>
       <div id="pcHint" class="hint">PC: Space thrust - A/D steer - W/S pitch</div>

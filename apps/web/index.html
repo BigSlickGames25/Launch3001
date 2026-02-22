@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no" />
-  <title>LAUNCHER – Neon Lander 3D</title>
+  <title>LAUNCHER - Neon Lander 3D</title>
   <link rel="stylesheet" href="/src/styles/ui.css" />
 </head>
 <body>
@@ -20,11 +20,17 @@
 
       <div class="center">
         <div id="status" class="status">READY</div>
-        <div class="mini">
-          <div><span class="k">ALT</span> <span id="alt">0.0</span></div>
-          <div><span class="k">VSPD</span> <span id="vspd">0.0</span></div>
-          <div><span class="k">HSPD</span> <span id="hspd">0.0</span></div>
-          <div><span class="k">ANG</span> <span id="ang">0</span>°</div>
+        <div class="telemetry-box">
+          <div class="telemetry-grid" id="gyroPad" aria-label="Gyro movement indicator">
+            <div class="telemetry-line telemetry-line-h"></div>
+            <div class="telemetry-line telemetry-line-v"></div>
+            <div class="telemetry-ring"></div>
+            <div id="gyroBall" class="telemetry-ball"></div>
+          </div>
+          <div class="telemetry-labels">
+            <span>STEER</span>
+            <span>PITCH</span>
+          </div>
         </div>
       </div>
 
@@ -57,7 +63,7 @@
       </div>
       <button id="btnCam">Cam: Chase</button>
       <button id="btnReset">Reset</button>
-      <div id="pcHint" class="hint">PC: Space thrust · A/D steer · W/S pitch</div>
+      <div id="pcHint" class="hint">PC: Space thrust - A/D steer - W/S pitch</div>
     </div>
 
     <!-- Touch hint -->

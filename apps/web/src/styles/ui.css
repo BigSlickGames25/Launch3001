@@ -63,7 +63,77 @@ html, body {
   color: var(--neon);
   margin-bottom: 6px;
 }
-.mini{ display:grid; grid-template-columns: 1fr 1fr; gap: 6px; color: var(--text); font-weight: 700; }
+
+.telemetry-box{
+  display: grid;
+  gap: 8px;
+  justify-items: center;
+  color: var(--text);
+}
+
+.telemetry-grid{
+  position: relative;
+  width: 112px;
+  height: 112px;
+  border-radius: 16px;
+  border: 1px solid var(--line);
+  background:
+    radial-gradient(circle at 50% 50%, rgba(0,255,255,0.06), rgba(0,0,0,0.1) 58%, rgba(0,0,0,0.24) 100%),
+    linear-gradient(180deg, rgba(0,40,60,0.25), rgba(0,0,0,0.1));
+  box-shadow: inset 0 0 20px rgba(0,255,255,0.08);
+  overflow: hidden;
+}
+
+.telemetry-line{
+  position: absolute;
+  background: rgba(0,255,255,0.16);
+}
+
+.telemetry-line-h{
+  left: 8px;
+  right: 8px;
+  top: 50%;
+  height: 1px;
+  transform: translateY(-50%);
+}
+
+.telemetry-line-v{
+  top: 8px;
+  bottom: 8px;
+  left: 50%;
+  width: 1px;
+  transform: translateX(-50%);
+}
+
+.telemetry-ring{
+  position: absolute;
+  inset: 16px;
+  border-radius: 50%;
+  border: 1px solid rgba(0,255,255,0.14);
+}
+
+.telemetry-ball{
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 35%, #d6ffff 0%, #66ffff 35%, #00e6ff 70%, #0084b6 100%);
+  border: 1px solid rgba(255,255,255,0.35);
+  box-shadow: 0 0 10px rgba(0,255,255,0.9);
+  transform: translate(-50%, -50%);
+}
+
+.telemetry-labels{
+  width: 112px;
+  display: flex;
+  justify-content: space-between;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.8px;
+}
 
 button{
   width: 100%;

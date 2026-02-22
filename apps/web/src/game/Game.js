@@ -170,7 +170,9 @@ export class Game {
       alt,
       vspd,
       hspd,
-      ang
+      ang,
+      tiltX: this.input.tilt.x,
+      tiltY: this.input.tilt.y
     });
   }
 

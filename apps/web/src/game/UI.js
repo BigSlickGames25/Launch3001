@@ -4,12 +4,9 @@ export class UI {
     this.score = document.getElementById("score");
     this.best = document.getElementById("best");
 
-    this.alt = document.getElementById("alt");
-    this.vspd = document.getElementById("vspd");
-    this.hspd = document.getElementById("hspd");
-    this.ang = document.getElementById("ang");
-
     this.status = document.getElementById("status");
+    this.gyroPad = document.getElementById("gyroPad");
+    this.gyroBall = document.getElementById("gyroBall");
 
     this.settingsMenu = document.getElementById("settingsMenu");
     this.btnMenu = document.getElementById("btnMenu");
@@ -54,6 +51,20 @@ export class UI {
     this.btnSteer.textContent = `Steering: ${mode === "TABLETOP" ? "Tabletop" : "Upright"}`;
   }
 
+  setGyroPreview(x, y) {
+    if (!this.gyroPad || !this.gyroBall) return;
+
+    const cx = Math.max(-1, Math.min(1, x || 0));
+    const cy = Math.max(-1, Math.min(1, y || 0));
+    const radius = Math.max(10, (Math.min(this.gyroPad.clientWidth, this.gyroPad.clientHeight) * 0.5) - 14);
+    const dx = cx * radius;
+    const dy = -cy * radius;
+    const mag = Math.min(1, Math.hypot(cx, cy));
+
+    this.gyroBall.style.transform = `translate(calc(-50% + ${dx.toFixed(1)}px), calc(-50% + ${dy.toFixed(1)}px))`;
+    this.gyroBall.style.boxShadow = `0 0 ${10 + Math.round(mag * 14)}px rgba(0,255,255,0.9)`;
+  }
+
   toggleMenu(force) {
     const shouldShow =
       typeof force === "boolean"
@@ -72,10 +83,6 @@ export class UI {
     this.lvl.textContent = data.level;
     this.score.textContent = data.score;
     this.best.textContent = data.best;
-
-    this.alt.textContent = data.alt.toFixed(1);
-    this.vspd.textContent = data.vspd.toFixed(1);
-    this.hspd.textContent = data.hspd.toFixed(1);
-    this.ang.textContent = String(Math.round(data.ang));
+    this.setGyroPreview(data.tiltX, data.tiltY);
   }
 }

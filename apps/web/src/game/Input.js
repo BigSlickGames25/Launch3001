@@ -18,6 +18,7 @@ export class Input {
     this.sensitivityScale = 1.0;
     this.keyboardAxisStrength = 0.9;
     this._hasMotionSample = false;
+    this.steerMode = localStorage.getItem("launcher_steer_mode") === "TABLETOP" ? "TABLETOP" : "UPRIGHT";
     this.keys = {
       left: false,
       right: false,
@@ -29,6 +30,7 @@ export class Input {
     this._bindKeyboard();
     this._bindButtons();
     this._bindMotion();
+    this.ui.setSteerMode(this.steerMode);
   }
 
   _bindTouch() {
@@ -115,11 +117,19 @@ export class Input {
       this.calibrate();
       this.ui.toggleMenu(false);
     });
+    this.ui.btnSteer.addEventListener("click", () => {
+      this.steerMode = this.steerMode === "UPRIGHT" ? "TABLETOP" : "UPRIGHT";
+      localStorage.setItem("launcher_steer_mode", this.steerMode);
+      this.ui.setSteerMode(this.steerMode);
+      this.calibrate();
+      this.ui.setStatus(`STEER ${this.steerMode}`, "ok");
+      this.ui.toggleMenu(false);
+    });
   }
 
   _bindMotion() {
     const onOrientation = (e) => {
-      if (!this.motionEnabled) return;
+      if (!this.motionEnabled || this.steerMode !== "UPRIGHT") return;
       const gamma = e.gamma;
       const beta = e.beta;
       if (typeof gamma !== "number" || typeof beta !== "number") return;
@@ -128,8 +138,39 @@ export class Input {
       this._hasMotionSample = true;
     };
 
+    const onMotion = (e) => {
+      if (!this.motionEnabled || this.steerMode !== "TABLETOP") return;
+      const src = e.accelerationIncludingGravity ?? e.acceleration;
+      if (!src) return;
+
+      const ax = typeof src.x === "number" ? src.x : 0;
+      const ay = typeof src.y === "number" ? src.y : 0;
+      const angle =
+        typeof screen.orientation?.angle === "number"
+          ? screen.orientation.angle
+          : (typeof window.orientation === "number" ? window.orientation : 0);
+
+      let rx = ax;
+      let ry = ay;
+      if (angle === 90) {
+        rx = -ay;
+        ry = ax;
+      } else if (angle === -90 || angle === 270) {
+        rx = ay;
+        ry = -ax;
+      } else if (Math.abs(angle) === 180) {
+        rx = -ax;
+        ry = -ay;
+      }
+
+      this.raw.x = clamp(rx / 4.5, -1.5, 1.5);
+      this.raw.y = clamp(-ry / 4.5, -1.5, 1.5);
+      this._hasMotionSample = true;
+    };
+
     window.addEventListener("deviceorientation", onOrientation);
     window.addEventListener("deviceorientationabsolute", onOrientation);
+    window.addEventListener("devicemotion", onMotion);
   }
 
   async enableMotion() {

@@ -16,6 +16,7 @@ export class UI {
     this.btnMenuClose = document.getElementById("btnMenuClose");
     this.btnMotion = document.getElementById("btnMotion");
     this.btnCal = document.getElementById("btnCal");
+    this.btnSteer = document.getElementById("btnSteer");
     this.sensRange = document.getElementById("sensRange");
     this.gravRange = document.getElementById("gravRange");
     this.sensValue = document.getElementById("sensValue");
@@ -47,6 +48,10 @@ export class UI {
     const pct = Math.round(scale * 100);
     this.gravValue.textContent = `${pct}%`;
     this.gravRange.value = String(pct);
+  }
+
+  setSteerMode(mode) {
+    this.btnSteer.textContent = `Steering: ${mode === "TABLETOP" ? "Tabletop" : "Upright"}`;
   }
 
   toggleMenu(force) {

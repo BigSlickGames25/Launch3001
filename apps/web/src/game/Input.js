@@ -19,6 +19,8 @@ export class Input {
     this.keyboardAxisStrength = 0.9;
     this._hasMotionSample = false;
     this.steerMode = localStorage.getItem("launcher_steer_mode") === "TABLETOP" ? "TABLETOP" : "UPRIGHT";
+    this.invertLR = localStorage.getItem("launcher_invert_lr") === "1";
+    this.invertFB = localStorage.getItem("launcher_invert_fb") === "1";
     this.keys = {
       left: false,
       right: false,
@@ -31,6 +33,8 @@ export class Input {
     this._bindButtons();
     this._bindMotion();
     this.ui.setSteerMode(this.steerMode);
+    this.ui.setInvertLR(this.invertLR);
+    this.ui.setInvertFB(this.invertFB);
   }
 
   _bindTouch() {
@@ -124,6 +128,18 @@ export class Input {
       this.calibrate();
       this.ui.setStatus(`STEER ${this.steerMode}`, "ok");
       this.ui.toggleMenu(false);
+    });
+    this.ui.btnInvertLR.addEventListener("click", () => {
+      this.invertLR = !this.invertLR;
+      localStorage.setItem("launcher_invert_lr", this.invertLR ? "1" : "0");
+      this.ui.setInvertLR(this.invertLR);
+      this.ui.setStatus(`INV L/R ${this.invertLR ? "ON" : "OFF"}`, "ok");
+    });
+    this.ui.btnInvertFB.addEventListener("click", () => {
+      this.invertFB = !this.invertFB;
+      localStorage.setItem("launcher_invert_fb", this.invertFB ? "1" : "0");
+      this.ui.setInvertFB(this.invertFB);
+      this.ui.setStatus(`INV F/B ${this.invertFB ? "ON" : "OFF"}`, "ok");
     });
   }
 
@@ -226,8 +242,10 @@ export class Input {
   update(dt) {
     const kx = (this.keys.right ? 1 : 0) - (this.keys.left ? 1 : 0);
     const ky = (this.keys.up ? 1 : 0) - (this.keys.down ? 1 : 0);
-    const xAxis = this.raw.x - this.bias.x + kx * this.keyboardAxisStrength;
-    const yAxis = this.raw.y - this.bias.y + ky * this.keyboardAxisStrength;
+    const xAxisBase = this.raw.x - this.bias.x + kx * this.keyboardAxisStrength;
+    const yAxisBase = this.raw.y - this.bias.y + ky * this.keyboardAxisStrength;
+    const xAxis = (this.invertLR ? -1 : 1) * xAxisBase;
+    const yAxis = (this.invertFB ? -1 : 1) * yAxisBase;
 
     const tx = clamp(
       xAxis * this.sensitivityScale,

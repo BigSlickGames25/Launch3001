@@ -14,6 +14,8 @@ export class UI {
     this.btnMotion = document.getElementById("btnMotion");
     this.btnCal = document.getElementById("btnCal");
     this.btnSteer = document.getElementById("btnSteer");
+    this.btnInvertLR = document.getElementById("btnInvertLR");
+    this.btnInvertFB = document.getElementById("btnInvertFB");
     this.sensRange = document.getElementById("sensRange");
     this.gravRange = document.getElementById("gravRange");
     this.sensValue = document.getElementById("sensValue");
@@ -49,6 +51,14 @@ export class UI {
 
   setSteerMode(mode) {
     this.btnSteer.textContent = `Steering: ${mode === "TABLETOP" ? "Tabletop" : "Upright"}`;
+  }
+
+  setInvertLR(enabled) {
+    this.btnInvertLR.textContent = `Invert L/R: ${enabled ? "On" : "Off"}`;
+  }
+
+  setInvertFB(enabled) {
+    this.btnInvertFB.textContent = `Invert F/B: ${enabled ? "On" : "Off"}`;
   }
 
   setGyroPreview(x, y) {

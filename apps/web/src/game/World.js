@@ -5,11 +5,20 @@ export class World {
     this.group = new THREE.Group();
     this._time = 0;
 
-    const hemi = new THREE.HemisphereLight(0x88ffff, 0x110022, 0.8);
+    const hemi = new THREE.HemisphereLight(0x88ffff, 0x110022, 0.9);
     this.group.add(hemi);
 
     const dir = new THREE.DirectionalLight(0xffffff, 0.8);
-    dir.position.set(5, 10, 2);
+    dir.position.set(10, 16, 7);
+    dir.castShadow = true;
+    dir.shadow.mapSize.set(1024, 1024);
+    dir.shadow.camera.near = 1;
+    dir.shadow.camera.far = 60;
+    dir.shadow.camera.left = -24;
+    dir.shadow.camera.right = 24;
+    dir.shadow.camera.top = 24;
+    dir.shadow.camera.bottom = -24;
+    dir.shadow.bias = -0.00025;
     this.group.add(dir);
 
     this.skyDome = this._createSkyDome();
@@ -28,10 +37,14 @@ export class World {
 
     this.launchPad = this._createPad(0x00ffff);
     this.launchPad.position.set(-10, 0.5, 0);
+    this.launchPad.castShadow = true;
+    this.launchPad.receiveShadow = true;
     this.group.add(this.launchPad);
 
     this.landingPad = this._createPad(0x00ff88);
     this.landingPad.position.set(12, 0.5, 0);
+    this.landingPad.castShadow = true;
+    this.landingPad.receiveShadow = true;
     this.group.add(this.landingPad);
 
     this.launchGlow = new THREE.PointLight(0x00ffff, 2.3, 26, 2);
@@ -44,6 +57,8 @@ export class World {
 
     this.roof = this._createRoof();
     this.roof.visible = false;
+    this.roof.castShadow = true;
+    this.roof.receiveShadow = true;
     this.group.add(this.roof);
 
     this.spawn = new THREE.Vector3(-10, this.launchPadTopY() + 0.6, 0);
@@ -147,17 +162,38 @@ export class World {
     pos.needsUpdate = true;
     geom.computeVertexNormals();
 
-    const mat = new THREE.MeshStandardMaterial({
-      color: 0x05060a,
-      emissive: 0x001018,
-      metalness: 0.2,
-      roughness: 0.9,
-      wireframe: true
-    });
+    const base = new THREE.Mesh(
+      geom,
+      new THREE.MeshStandardMaterial({
+        color: 0x05070c,
+        emissive: 0x00080f,
+        emissiveIntensity: 0.35,
+        metalness: 0.1,
+        roughness: 0.95
+      })
+    );
+    base.receiveShadow = true;
+    base.position.y = -0.01;
 
-    const mesh = new THREE.Mesh(geom, mat);
-    mesh.position.y = 0;
-    return mesh;
+    const wire = new THREE.Mesh(
+      geom,
+      new THREE.MeshStandardMaterial({
+        color: 0x0d1530,
+        emissive: 0x08243a,
+        emissiveIntensity: 0.55,
+        metalness: 0.2,
+        roughness: 0.8,
+        wireframe: true,
+        transparent: true,
+        opacity: 0.95
+      })
+    );
+    wire.receiveShadow = false;
+
+    const terrainGroup = new THREE.Group();
+    terrainGroup.add(base);
+    terrainGroup.add(wire);
+    return terrainGroup;
   }
 
   _createPad(color) {

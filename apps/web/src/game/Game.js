@@ -13,6 +13,10 @@ export class Game {
 
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: false });
     this.renderer.setPixelRatio(Math.min(2, window.devicePixelRatio || 1));
+    this.renderer.shadowMap.enabled = true;
+    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    this.renderer.toneMappingExposure = 1.05;
 
     this.scene = new THREE.Scene();
     this.scene.fog = new THREE.Fog(0x05060a, 12, 90);
@@ -162,6 +166,13 @@ export class Game {
     const { vspd, hspd, ang } = this.rocket.getMetrics();
     const groundY = this.world.groundHeightAt(this.rocket.pos.x, this.rocket.pos.z);
     const alt = Math.max(0, this.rocket.pos.y - groundY);
+    const surfaceY = Math.max(
+      groundY,
+      this.world.isOverLaunchPad(this.rocket.pos) ? this.world.launchPadTopY() : -Infinity,
+      this.world.isOverLandingPad(this.rocket.pos) ? this.world.landingPadTopY() : -Infinity
+    );
+
+    this.rocket.updateGroundReference(surfaceY);
 
     this.ui.update(dt, {
       level: this.levelIndex + 1,

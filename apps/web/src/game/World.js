@@ -3,6 +3,7 @@ import * as THREE from "three";
 export class World {
   constructor() {
     this.group = new THREE.Group();
+    this._time = 0;
 
     const hemi = new THREE.HemisphereLight(0x88ffff, 0x110022, 0.8);
     this.group.add(hemi);
@@ -10,6 +11,17 @@ export class World {
     const dir = new THREE.DirectionalLight(0xffffff, 0.8);
     dir.position.set(5, 10, 2);
     this.group.add(dir);
+
+    this.skyDome = this._createSkyDome();
+    this.group.add(this.skyDome);
+
+    this.starField = this._createStarField();
+    this.group.add(this.starField);
+
+    this.horizonGlowA = this._createHorizonGlow(24, 36, 0x00ddff, 0.18);
+    this.group.add(this.horizonGlowA);
+    this.horizonGlowB = this._createHorizonGlow(28, 44, 0xff2bd6, 0.1);
+    this.group.add(this.horizonGlowB);
 
     this.terrain = this._createTerrain();
     this.group.add(this.terrain);
@@ -22,12 +34,103 @@ export class World {
     this.landingPad.position.set(12, 0.5, 0);
     this.group.add(this.landingPad);
 
+    this.launchGlow = new THREE.PointLight(0x00ffff, 2.3, 26, 2);
+    this.launchGlow.position.set(this.launchPad.position.x, 2.8, this.launchPad.position.z);
+    this.group.add(this.launchGlow);
+
+    this.landingGlow = new THREE.PointLight(0x00ff88, 2.0, 24, 2);
+    this.landingGlow.position.set(this.landingPad.position.x, 2.8, this.landingPad.position.z);
+    this.group.add(this.landingGlow);
+
     this.roof = this._createRoof();
     this.roof.visible = false;
     this.group.add(this.roof);
 
-    this.spawn = new THREE.Vector3(-10, 2.0, 0);
+    this.spawn = new THREE.Vector3(-10, this.launchPadTopY() + 0.6, 0);
     this.padHalf = 1.5;
+  }
+
+  _createSkyDome() {
+    const canvas = document.createElement("canvas");
+    canvas.width = 32;
+    canvas.height = 512;
+    const ctx = canvas.getContext("2d");
+    const g = ctx.createLinearGradient(0, 0, 0, canvas.height);
+    g.addColorStop(0.0, "#010108");
+    g.addColorStop(0.35, "#050b1d");
+    g.addColorStop(0.65, "#1a0b2f");
+    g.addColorStop(1.0, "#030309");
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    const tex = new THREE.CanvasTexture(canvas);
+    tex.colorSpace = THREE.SRGBColorSpace;
+
+    const mat = new THREE.MeshBasicMaterial({
+      map: tex,
+      side: THREE.BackSide,
+      depthWrite: false,
+      fog: false
+    });
+    const mesh = new THREE.Mesh(new THREE.SphereGeometry(140, 40, 24), mat);
+    mesh.position.set(1, 18, 0);
+    return mesh;
+  }
+
+  _createStarField() {
+    const count = 1400;
+    const positions = new Float32Array(count * 3);
+    const colors = new Float32Array(count * 3);
+    const c = new THREE.Color();
+
+    for (let i = 0; i < count; i++) {
+      const a = Math.random() * Math.PI * 2;
+      const r = 46 + Math.random() * 82;
+      const y = 8 + Math.pow(Math.random(), 0.45) * 78;
+      positions[i * 3 + 0] = Math.cos(a) * r;
+      positions[i * 3 + 1] = y;
+      positions[i * 3 + 2] = Math.sin(a) * r;
+
+      const t = Math.random();
+      c.setRGB(0.65 + t * 0.35, 0.75 + t * 0.25, 1.0);
+      colors[i * 3 + 0] = c.r;
+      colors[i * 3 + 1] = c.g;
+      colors[i * 3 + 2] = c.b;
+    }
+
+    const geom = new THREE.BufferGeometry();
+    geom.setAttribute("position", new THREE.BufferAttribute(positions, 3));
+    geom.setAttribute("color", new THREE.BufferAttribute(colors, 3));
+
+    const mat = new THREE.PointsMaterial({
+      size: 0.48,
+      sizeAttenuation: true,
+      vertexColors: true,
+      transparent: true,
+      opacity: 0.9,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+      fog: false
+    });
+
+    return new THREE.Points(geom, mat);
+  }
+
+  _createHorizonGlow(inner, outer, color, opacity) {
+    const geom = new THREE.RingGeometry(inner, outer, 96);
+    const mat = new THREE.MeshBasicMaterial({
+      color,
+      transparent: true,
+      opacity,
+      side: THREE.DoubleSide,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+      fog: false
+    });
+    const mesh = new THREE.Mesh(geom, mat);
+    mesh.rotation.x = -Math.PI / 2;
+    mesh.position.set(1, 0.2, 0);
+    return mesh;
   }
 
   _createTerrain() {
@@ -99,7 +202,43 @@ export class World {
     return Math.abs(pos.x - c.x) <= this.padHalf && Math.abs(pos.z - c.z) <= this.padHalf;
   }
 
+  isOverLaunchPad(pos) {
+    const c = this.launchPad.position;
+    return Math.abs(pos.x - c.x) <= this.padHalf && Math.abs(pos.z - c.z) <= this.padHalf;
+  }
+
   landingPadTopY() {
     return this.landingPad.position.y + 0.5;
+  }
+
+  launchPadTopY() {
+    return this.launchPad.position.y + 0.5;
+  }
+
+  landingPadAimPoint(target = new THREE.Vector3()) {
+    return target.set(
+      this.landingPad.position.x,
+      this.landingPadTopY() + 0.25,
+      this.landingPad.position.z
+    );
+  }
+
+  update(dt, focus) {
+    this._time += dt;
+
+    if (focus) {
+      this.skyDome.position.x = focus.x * 0.25;
+      this.skyDome.position.z = focus.z * 0.25;
+      this.skyDome.position.y = Math.max(18, focus.y * 0.3 + 12);
+    }
+
+    this.starField.rotation.y += dt * 0.012;
+    this.starField.rotation.z = Math.sin(this._time * 0.09) * 0.06;
+
+    this.horizonGlowA.material.opacity = 0.14 + Math.sin(this._time * 1.2) * 0.04;
+    this.horizonGlowB.material.opacity = 0.08 + Math.sin(this._time * 0.85 + 1.3) * 0.03;
+
+    this.launchGlow.intensity = 2.2 + Math.sin(this._time * 2.2) * 0.35;
+    this.landingGlow.intensity = 1.9 + Math.sin(this._time * 1.7 + 0.9) * 0.3;
   }
 }

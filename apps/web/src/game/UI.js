@@ -13,6 +13,8 @@ export class UI {
 
     this.btnMotion = document.getElementById("btnMotion");
     this.btnCal = document.getElementById("btnCal");
+    this.btnSens = document.getElementById("btnSens");
+    this.btnGrav = document.getElementById("btnGrav");
     this.btnCam = document.getElementById("btnCam");
     this.btnReset = document.getElementById("btnReset");
 
@@ -28,6 +30,14 @@ export class UI {
       mode === "ok" ? "rgba(80,255,160,0.95)" :
       "rgba(0,255,255,0.9)";
     this._statusTimer = 1.2;
+  }
+
+  setSensitivityScale(scale) {
+    this.btnSens.textContent = `Sensitivity: ${Math.round(scale * 100)}%`;
+  }
+
+  setGravityScale(scale) {
+    this.btnGrav.textContent = `Gravity: ${Math.round(scale * 100)}%`;
   }
 
   update(dt, data) {

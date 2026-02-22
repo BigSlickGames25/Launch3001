@@ -19,6 +19,8 @@ export class Game {
 
     this.camera = new THREE.PerspectiveCamera(65, 1, 0.1, 200);
     this.camMode = "CHASE";
+    this._camA = new THREE.Vector3();
+    this._camB = new THREE.Vector3();
 
     this.ui = new UI();
     this.input = new Input({ canvas, ui: this.ui });
@@ -33,8 +35,13 @@ export class Game {
     this.score = 0;
     this.best = Number(localStorage.getItem("launcher_best") || "0");
     this.state = "READY";
+    this.sensitivityScale = 1.0;
+    this.gravityScale = 1.0;
 
     this._bindUI();
+    this.input.setSensitivityScale(this.sensitivityScale);
+    this.ui.setSensitivityScale(this.sensitivityScale);
+    this.ui.setGravityScale(this.gravityScale);
     this._resize();
     window.addEventListener("resize", () => this._resize());
 
@@ -48,6 +55,29 @@ export class Game {
       this.ui.btnCam.textContent = `Cam: ${this.camMode === "CHASE" ? "Chase" : "Cockpit"}`;
       this.ui.setStatus(`CAM ${this.camMode}`, "ok");
     });
+    this.ui.btnSens.addEventListener("click", () => this._cycleSensitivityDown());
+    this.ui.btnGrav.addEventListener("click", () => this._cycleGravityDown());
+  }
+
+  _nextStepDown(current) {
+    const steps = [1.0, 0.85, 0.7, 0.55, 0.4];
+    const idx = steps.findIndex((v) => Math.abs(v - current) < 0.001);
+    if (idx < 0) return steps[1];
+    return steps[(idx + 1) % steps.length];
+  }
+
+  _cycleSensitivityDown() {
+    this.sensitivityScale = this._nextStepDown(this.sensitivityScale);
+    this.input.setSensitivityScale(this.sensitivityScale);
+    this.ui.setSensitivityScale(this.sensitivityScale);
+    this.ui.setStatus(`SENS ${Math.round(this.sensitivityScale * 100)}%`, "ok");
+  }
+
+  _cycleGravityDown() {
+    this.gravityScale = this._nextStepDown(this.gravityScale);
+    this.physics.gravity = LEVELS[this.levelIndex].gravity * this.gravityScale;
+    this.ui.setGravityScale(this.gravityScale);
+    this.ui.setStatus(`GRAV ${Math.round(this.gravityScale * 100)}%`, "ok");
   }
 
   start() {
@@ -66,7 +96,7 @@ export class Game {
     this.levelIndex = clamp(idx, 0, LEVELS.length - 1);
     const level = LEVELS[this.levelIndex];
 
-    this.physics.gravity = level.gravity;
+    this.physics.gravity = level.gravity * this.gravityScale;
     this.physics.wind = level.wind;
 
     this.world.applyLevel(level);
@@ -78,7 +108,7 @@ export class Game {
   resetLevel() {
     this.state = "READY";
     this.rocket.reset(this.world.spawn);
-    this.input.thrustHeld = false;
+    this.input.clearThrustState();
   }
 
   nextLevel() {
@@ -107,10 +137,19 @@ export class Game {
         this.crash("ROOF HIT");
       }
 
+      const launchPadTop = this.world.launchPadTopY();
+      const onLaunchArea = this.world.isOverLaunchPad(this.rocket.pos) && (this.rocket.pos.y <= launchPadTop + 0.7);
+      if (onLaunchArea && this.rocket.pos.y <= launchPadTop + 0.6) {
+        this.rocket.pos.y = launchPadTop + 0.6;
+        this.rocket.vel.y = Math.max(0, this.rocket.vel.y);
+        this.rocket.vel.x *= 0.9;
+        this.rocket.vel.z *= 0.9;
+      }
+
       const padTop = this.world.landingPadTopY();
       const onLandingArea = this.world.isOverLandingPad(this.rocket.pos) && (this.rocket.pos.y <= padTop + 0.7);
 
-      if (!onLandingArea && this.rocket.pos.y <= groundY + 0.65) {
+      if (!onLandingArea && !onLaunchArea && this.rocket.pos.y <= groundY + 0.65) {
         this.crash("TERRAIN HIT");
       }
 
@@ -119,6 +158,7 @@ export class Game {
       }
     }
 
+    this.world.update(dt, this.rocket.pos);
     this.rocket.updateVisuals(this.input, dt);
 
     const { vspd, hspd, ang } = this.rocket.getMetrics();
@@ -178,14 +218,26 @@ export class Game {
     const p = this.rocket.pos;
 
     if (this.camMode === "CHASE") {
-      const camPos = new THREE.Vector3(p.x - 6, p.y + 4.5, p.z + 10);
-      this.camera.position.lerp(camPos, 0.12);
-      this.camera.lookAt(p.x + 2, p.y + 1.2, p.z);
-      this.camera.fov = 65;
+      const climb = Math.max(0, p.y - (this.world.launchPadTopY() + 0.6));
+      const zoomOut = clamp(climb / 12, 0, 1.4);
+
+      const side = 6 + zoomOut * 3;
+      const up = 4.5 + zoomOut * 7.5;
+      const back = 10 + zoomOut * 15;
+
+      this._camA.set(p.x - side, p.y + up, p.z + back);
+      this.camera.position.lerp(this._camA, 0.12);
+
+      const padFocus = this.world.landingPadAimPoint(this._camA);
+      this._camB.set(p.x + 2, p.y + 1.2, p.z);
+      this._camB.lerp(padFocus, clamp(zoomOut * 0.62, 0, 0.62));
+      this.camera.lookAt(this._camB.x, this._camB.y, this._camB.z);
+
+      this.camera.fov = 65 + zoomOut * 17;
       this.camera.updateProjectionMatrix();
     } else {
-      const camPos = new THREE.Vector3(p.x, p.y + 1.2, p.z + 1.8);
-      this.camera.position.lerp(camPos, 0.18);
+      this._camA.set(p.x, p.y + 1.2, p.z + 1.8);
+      this.camera.position.lerp(this._camA, 0.18);
       this.camera.lookAt(p.x + 3.5, p.y + 1.0, p.z);
       this.camera.fov = 80;
       this.camera.updateProjectionMatrix();

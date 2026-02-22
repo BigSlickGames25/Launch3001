@@ -57,6 +57,14 @@ button{
 }
 button:active{ transform: scale(0.98); }
 
+.hint{
+  margin-top: 6px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.3;
+  font-weight: 700;
+}
+
 #touchHint{
   position:absolute;
   bottom: calc(14px + var(--safe-bottom));

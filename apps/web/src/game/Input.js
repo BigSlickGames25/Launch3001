@@ -6,6 +6,8 @@ export class Input {
     this.ui = ui;
 
     this.thrustHeld = false;
+    this.touchThrust = false;
+    this.keyboardThrust = false;
 
     // Tilt state
     this.motionEnabled = false;
@@ -13,20 +15,95 @@ export class Input {
     this.raw = { x: 0, y: 0 };
     this.tilt = { x: 0, y: 0 }; // smoothed
     this.tiltRate = 14;
+    this.sensitivityScale = 1.0;
+    this.keyboardAxisStrength = 0.9;
     this._hasMotionSample = false;
+    this.keys = {
+      left: false,
+      right: false,
+      up: false,
+      down: false
+    };
 
     this._bindTouch();
+    this._bindKeyboard();
     this._bindButtons();
     this._bindMotion();
   }
 
   _bindTouch() {
-    const down = () => { this.thrustHeld = true; };
-    const up = () => { this.thrustHeld = false; };
+    const down = () => {
+      this.touchThrust = true;
+      this._syncThrust();
+    };
+    const up = () => {
+      this.touchThrust = false;
+      this._syncThrust();
+    };
 
     this.canvas.addEventListener("pointerdown", down);
     window.addEventListener("pointerup", up);
     window.addEventListener("pointercancel", up);
+  }
+
+  _bindKeyboard() {
+    const setKey = (code, isDown) => {
+      if (code === "ArrowLeft" || code === "KeyA") this.keys.left = isDown;
+      if (code === "ArrowRight" || code === "KeyD") this.keys.right = isDown;
+      if (code === "ArrowUp" || code === "KeyW") this.keys.up = isDown;
+      if (code === "ArrowDown" || code === "KeyS") this.keys.down = isDown;
+      if (code === "Space") this.keyboardThrust = isDown;
+      this._syncThrust();
+    };
+
+    window.addEventListener("keydown", (e) => {
+      if (
+        e.code === "Space" ||
+        e.code === "ArrowLeft" ||
+        e.code === "ArrowRight" ||
+        e.code === "ArrowUp" ||
+        e.code === "ArrowDown"
+      ) {
+        e.preventDefault();
+      }
+      setKey(e.code, true);
+    });
+
+    window.addEventListener("keyup", (e) => {
+      if (
+        e.code === "Space" ||
+        e.code === "ArrowLeft" ||
+        e.code === "ArrowRight" ||
+        e.code === "ArrowUp" ||
+        e.code === "ArrowDown"
+      ) {
+        e.preventDefault();
+      }
+      setKey(e.code, false);
+    });
+
+    window.addEventListener("blur", () => {
+      this.keys.left = false;
+      this.keys.right = false;
+      this.keys.up = false;
+      this.keys.down = false;
+      this.keyboardThrust = false;
+      this._syncThrust();
+    });
+  }
+
+  _syncThrust() {
+    this.thrustHeld = this.touchThrust || this.keyboardThrust;
+  }
+
+  clearThrustState() {
+    this.touchThrust = false;
+    this.keyboardThrust = false;
+    this._syncThrust();
+  }
+
+  setSensitivityScale(scale) {
+    this.sensitivityScale = clamp(scale, 0.35, 1.4);
   }
 
   _bindButtons() {
@@ -102,8 +179,19 @@ export class Input {
   }
 
   update(dt) {
-    const tx = clamp(this.raw.x - this.bias.x, -1.2, 1.2);
-    const ty = clamp(this.raw.y - this.bias.y, -1.2, 1.2);
+    const kx = (this.keys.right ? 1 : 0) - (this.keys.left ? 1 : 0);
+    const ky = (this.keys.up ? 1 : 0) - (this.keys.down ? 1 : 0);
+
+    const tx = clamp(
+      (this.raw.x - this.bias.x + kx * this.keyboardAxisStrength) * this.sensitivityScale,
+      -1.2,
+      1.2
+    );
+    const ty = clamp(
+      (this.raw.y - this.bias.y + ky * this.keyboardAxisStrength) * this.sensitivityScale,
+      -1.2,
+      1.2
+    );
 
     this.tilt.x = smooth(this.tilt.x, tx, this.tiltRate, dt);
     this.tilt.y = smooth(this.tilt.y, ty, this.tiltRate, dt);

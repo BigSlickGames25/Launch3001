@@ -868,9 +868,11 @@ export class World {
 
       const baseY = this.groundHeightAt(gate.x, gate.z) - 0.02;
       const frameT = Math.max(0.3, gate.frameThickness);
-      const depth = Math.max(0.8, gate.depth);
-      const openW = Math.max(1.7, gate.openW);
+      const depth = Math.max(0.8, gate.depth); // used as tunnel thickness baseline
+      const openW = Math.max(1.7, gate.openW); // lateral opening width (z axis)
       const openH = Math.max(2.0, gate.openH);
+      const tunnelLen = Math.max(2.6, depth * 3.6 + frameT * 2.4); // route direction (x axis)
+      const ribCount = Math.max(3, Math.min(8, Math.round(tunnelLen / 0.85)));
       const beamH = Math.max(0.34, frameT * 1.15);
       const openingFloorY = baseY + 0.45;
       const beamBottomY = openingFloorY + openH;
@@ -878,54 +880,107 @@ export class World {
       const topBeamCenterY = beamBottomY + beamH * 0.5;
       const postHeight = Math.max(1.1, beamBottomY - baseY);
       const postCenterY = baseY + postHeight * 0.5;
-      const postOffsetX = openW * 0.5 + frameT * 0.5;
-      const capWidth = openW + frameT * 2;
+      const postOffsetZ = openW * 0.5 + frameT * 0.5;
+      const capWidthZ = openW + frameT * 2;
+      const tunnelOuterZ = openW + frameT * 3.4;
+      const xMin = gate.x - tunnelLen * 0.5;
+      const xMax = gate.x + tunnelLen * 0.5;
 
-      const leftPost = new THREE.Mesh(new THREE.BoxGeometry(frameT, postHeight, depth), rockMat);
-      leftPost.position.set(gate.x - postOffsetX, postCenterY, gate.z);
+      // Main tunnel shell that runs along the route direction (X).
+      const leftPost = new THREE.Mesh(new THREE.BoxGeometry(tunnelLen, postHeight, frameT), rockMat);
+      leftPost.position.set(gate.x, postCenterY, gate.z - postOffsetZ);
       leftPost.castShadow = true;
       leftPost.receiveShadow = true;
       gateGroup.add(leftPost);
-      this._pushTunnelCollisionBox(leftPost.position.x, leftPost.position.y, leftPost.position.z, frameT, postHeight, depth);
+      this._pushTunnelCollisionBox(leftPost.position.x, leftPost.position.y, leftPost.position.z, tunnelLen, postHeight, frameT);
 
-      const rightPost = new THREE.Mesh(new THREE.BoxGeometry(frameT, postHeight, depth), rockMat);
-      rightPost.position.set(gate.x + postOffsetX, postCenterY, gate.z);
+      const rightPost = new THREE.Mesh(new THREE.BoxGeometry(tunnelLen, postHeight, frameT), rockMat);
+      rightPost.position.set(gate.x, postCenterY, gate.z + postOffsetZ);
       rightPost.castShadow = true;
       rightPost.receiveShadow = true;
       gateGroup.add(rightPost);
-      this._pushTunnelCollisionBox(rightPost.position.x, rightPost.position.y, rightPost.position.z, frameT, postHeight, depth);
+      this._pushTunnelCollisionBox(rightPost.position.x, rightPost.position.y, rightPost.position.z, tunnelLen, postHeight, frameT);
 
-      const topBeam = new THREE.Mesh(new THREE.BoxGeometry(capWidth, beamH, depth), rockMat);
+      const topBeam = new THREE.Mesh(new THREE.BoxGeometry(tunnelLen, beamH, capWidthZ), rockMat);
       topBeam.position.set(gate.x, topBeamCenterY, gate.z);
       topBeam.castShadow = true;
       topBeam.receiveShadow = true;
       gateGroup.add(topBeam);
-      this._pushTunnelCollisionBox(topBeam.position.x, topBeam.position.y, topBeam.position.z, capWidth, beamH, depth);
+      this._pushTunnelCollisionBox(topBeam.position.x, topBeam.position.y, topBeam.position.z, tunnelLen, beamH, capWidthZ);
+
+      const shellRoofH = Math.max(0.28, frameT * 1.1);
+      const shellRoofY = topBeamCenterY + beamH * 0.5 + shellRoofH * 0.45;
+      const shellRoof = new THREE.Mesh(new THREE.BoxGeometry(tunnelLen, shellRoofH, tunnelOuterZ), rockMat);
+      shellRoof.position.set(gate.x, shellRoofY, gate.z);
+      shellRoof.castShadow = true;
+      shellRoof.receiveShadow = true;
+      gateGroup.add(shellRoof);
+      this._pushTunnelCollisionBox(shellRoof.position.x, shellRoof.position.y, shellRoof.position.z, tunnelLen, shellRoofH, tunnelOuterZ);
+
+      const shellSideH = Math.max(0.75, openH * 0.7);
+      const shellSideY = openingFloorY + shellSideH * 0.5 + 0.05;
+      const shellSideZ = openW * 0.5 + frameT * 1.35;
+      for (const sign of [-1, 1]) {
+        const sideShell = new THREE.Mesh(new THREE.BoxGeometry(tunnelLen, shellSideH, frameT * 1.25), rockMat);
+        sideShell.position.set(gate.x, shellSideY, gate.z + shellSideZ * sign);
+        sideShell.castShadow = true;
+        sideShell.receiveShadow = true;
+        gateGroup.add(sideShell);
+        this._pushTunnelCollisionBox(sideShell.position.x, sideShell.position.y, sideShell.position.z, tunnelLen, shellSideH, frameT * 1.25);
+      }
 
       // Thin illuminated trim around the opening makes the tunnel readable on fast approaches.
       const trimT = Math.max(0.04, frameT * 0.16);
-      const trimDepth = Math.max(0.02, depth * 0.72);
-      const trimZ = gate.z + depth * 0.02;
-      const leftTrim = new THREE.Mesh(new THREE.BoxGeometry(trimT, openH, trimDepth), trimMat);
-      leftTrim.position.set(gate.x - openW * 0.5, openingFloorY + openH * 0.5, trimZ);
-      leftTrim.castShadow = false;
-      gateGroup.add(leftTrim);
+      const trimFrameZ = Math.max(0.03, frameT * 0.48);
+      const trimInsetX = tunnelLen * 0.5 - trimT * 0.5;
+      for (const end of [-1, 1]) {
+        const endX = gate.x + trimInsetX * end;
 
-      const rightTrim = new THREE.Mesh(new THREE.BoxGeometry(trimT, openH, trimDepth), trimMat);
-      rightTrim.position.set(gate.x + openW * 0.5, openingFloorY + openH * 0.5, trimZ);
-      rightTrim.castShadow = false;
-      gateGroup.add(rightTrim);
+        const leftTrim = new THREE.Mesh(new THREE.BoxGeometry(trimT, openH, trimFrameZ), trimMat);
+        leftTrim.position.set(endX, openingFloorY + openH * 0.5, gate.z - openW * 0.5);
+        leftTrim.castShadow = false;
+        gateGroup.add(leftTrim);
 
-      const topTrim = new THREE.Mesh(new THREE.BoxGeometry(openW, trimT, trimDepth), trimMat);
-      topTrim.position.set(gate.x, openingFloorY + openH, trimZ);
-      topTrim.castShadow = false;
-      gateGroup.add(topTrim);
+        const rightTrim = new THREE.Mesh(new THREE.BoxGeometry(trimT, openH, trimFrameZ), trimMat);
+        rightTrim.position.set(endX, openingFloorY + openH * 0.5, gate.z + openW * 0.5);
+        rightTrim.castShadow = false;
+        gateGroup.add(rightTrim);
 
-      const glowPanel = new THREE.Mesh(new THREE.PlaneGeometry(openW * 0.92, openH * 0.92), glowMat);
-      glowPanel.position.set(gate.x, openingFloorY + openH * 0.5, gate.z + depth * 0.51);
-      glowPanel.castShadow = false;
-      glowPanel.receiveShadow = false;
-      gateGroup.add(glowPanel);
+        const topTrim = new THREE.Mesh(new THREE.BoxGeometry(trimT, trimT, openW), trimMat);
+        topTrim.position.set(endX, openingFloorY + openH, gate.z);
+        topTrim.castShadow = false;
+        gateGroup.add(topTrim);
+
+        const glowPanel = new THREE.Mesh(new THREE.PlaneGeometry(openW * 0.92, openH * 0.92), glowMat);
+        glowPanel.position.set(gate.x + (tunnelLen * 0.5 + 0.02) * end, openingFloorY + openH * 0.5, gate.z);
+        glowPanel.rotation.y = end > 0 ? -Math.PI / 2 : Math.PI / 2;
+        glowPanel.castShadow = false;
+        glowPanel.receiveShadow = false;
+        gateGroup.add(glowPanel);
+      }
+
+      // Rib segments to make each obstacle read as a tunnel corridor.
+      for (let i = 0; i < ribCount; i++) {
+        const t = ribCount === 1 ? 0.5 : i / (ribCount - 1);
+        const ribX = xMin + t * (xMax - xMin);
+        const ribT = Math.max(0.06, frameT * 0.34);
+        const ribMat = (i % 2 === 0) ? trimMat : rockMat;
+
+        const ribLeft = new THREE.Mesh(new THREE.BoxGeometry(ribT, postHeight, frameT * 0.9), ribMat);
+        ribLeft.position.set(ribX, postCenterY, gate.z - postOffsetZ);
+        ribLeft.castShadow = false;
+        gateGroup.add(ribLeft);
+
+        const ribRight = new THREE.Mesh(new THREE.BoxGeometry(ribT, postHeight, frameT * 0.9), ribMat);
+        ribRight.position.set(ribX, postCenterY, gate.z + postOffsetZ);
+        ribRight.castShadow = false;
+        gateGroup.add(ribRight);
+
+        const ribTop = new THREE.Mesh(new THREE.BoxGeometry(ribT, beamH, capWidthZ * 0.98), ribMat);
+        ribTop.position.set(ribX, topBeamCenterY, gate.z);
+        ribTop.castShadow = false;
+        gateGroup.add(ribTop);
+      }
 
       this.routeFeatures.add(gateGroup);
     }
@@ -939,13 +994,26 @@ export class World {
   }
 
   applyLevel(level) {
+    const routeLength = Math.max(16, level.routeLength ?? 22);
+    const routeMidX = 1.0;
+    const launchX = routeMidX - routeLength * 0.5;
+    const landingX = routeMidX + routeLength * 0.5;
+    const launchZ = 0;
+    const landingZ = 0;
+
     const launchSize = level.launchPadSize ?? level.padSize ?? 3.0;
     const landingSize = level.landingPadSize ?? level.padSize ?? 3.0;
+
+    this.launchPad.position.set(launchX, 0.5, launchZ);
+    this.landingPad.position.set(landingX, 0.5, landingZ);
+    this.launchGlow.position.set(launchX, 2.8, launchZ);
+    this.landingGlow.position.set(landingX, 2.8, landingZ);
 
     this.launchPad.scale.set(launchSize / 3, 1, launchSize / 3);
     this.landingPad.scale.set(landingSize / 3, 1, landingSize / 3);
     this.launchPadHalf = launchSize / 2;
     this.landingPadHalf = landingSize / 2;
+    this.spawn.set(this.launchPad.position.x, this.launchPadTopY() + 0.6, this.launchPad.position.z);
 
     this.roof.visible = false;
 

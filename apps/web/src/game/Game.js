@@ -240,7 +240,10 @@ export class Game {
     if (this.state !== "FLYING") return;
     this.state = "CRASHED";
     this.ui.setStatus(msg, "warn");
-    setTimeout(() => this.resetLevel(), 900);
+    setTimeout(() => {
+      this.score = 0;
+      this.loadLevel(0);
+    }, 900);
   }
 
   render() {

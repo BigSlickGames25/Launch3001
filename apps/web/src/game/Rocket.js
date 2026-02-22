@@ -467,7 +467,7 @@ export class Rocket {
     this._thrustVisual = smooth(this._thrustVisual, thrustTarget, input.thrustHeld ? 20 : 12, dt);
 
     const targetZ = clamp(-input.tilt.x * 0.6, -0.6, 0.6);
-    const targetX = clamp(input.tilt.y * 0.25, -0.25, 0.25);
+    const targetX = clamp(-input.tilt.y * 0.25, -0.25, 0.25);
 
     this.visualTilt.z = smooth(this.visualTilt.z, targetZ, 10, dt);
     this.visualTilt.x = smooth(this.visualTilt.x, targetX, 10, dt);

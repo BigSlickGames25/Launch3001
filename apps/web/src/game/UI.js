@@ -19,6 +19,7 @@ export class UI {
     this.btnMotion = document.getElementById("btnMotion");
     this.btnCal = document.getElementById("btnCal");
     this.btnSteer = document.getElementById("btnSteer");
+    this.btnSwapSides = document.getElementById("btnSwapSides");
     this.btnInvertLR = document.getElementById("btnInvertLR");
     this.btnInvertFB = document.getElementById("btnInvertFB");
     this.sensRange = document.getElementById("sensRange");
@@ -67,6 +68,15 @@ export class UI {
 
   setInvertLR(enabled) {
     this.btnInvertLR.textContent = `Invert L/R: ${enabled ? "On" : "Off"}`;
+  }
+
+  setControlSidesSwapped(enabled) {
+    if (this.btnSwapSides) {
+      this.btnSwapSides.textContent = `Control Sides: ${enabled ? "Swapped" : "Default"}`;
+    }
+    if (this.mobileControls) {
+      this.mobileControls.classList.toggle("swap-sides", !!enabled);
+    }
   }
 
   setInvertFB(enabled) {

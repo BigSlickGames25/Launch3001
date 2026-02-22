@@ -243,6 +243,10 @@ button:active{ transform: scale(0.98); }
   pointer-events: none;
 }
 
+#mobileControls.swap-sides{
+  flex-direction: row-reverse;
+}
+
 .control-cluster{
   pointer-events: auto;
   display: grid;

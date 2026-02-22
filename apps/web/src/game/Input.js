@@ -28,6 +28,7 @@ export class Input {
       storedSteerMode === "TABLETOP" || storedSteerMode === "JOYSTICK"
         ? storedSteerMode
         : "UPRIGHT";
+    this.swapControlSides = localStorage.getItem("launcher_swap_control_sides") === "1";
     this.invertLR = localStorage.getItem("launcher_invert_lr") === "1";
     this.invertFB = localStorage.getItem("launcher_invert_fb") === "1";
     this.keys = {
@@ -42,6 +43,7 @@ export class Input {
     this._bindButtons();
     this._bindMotion();
     this.ui.setSteerMode(this.steerMode);
+    this.ui.setControlSidesSwapped(this.swapControlSides);
     this.ui.setInvertLR(this.invertLR);
     this.ui.setInvertFB(this.invertFB);
   }
@@ -224,6 +226,12 @@ export class Input {
       }
       this.ui.setStatus(`STEER ${this.steerMode}`, "ok");
       this.ui.toggleMenu(false);
+    });
+    this.ui.btnSwapSides.addEventListener("click", () => {
+      this.swapControlSides = !this.swapControlSides;
+      localStorage.setItem("launcher_swap_control_sides", this.swapControlSides ? "1" : "0");
+      this.ui.setControlSidesSwapped(this.swapControlSides);
+      this.ui.setStatus(`CTRL SIDES ${this.swapControlSides ? "SWAP" : "DEFAULT"}`, "ok");
     });
     this.ui.btnInvertLR.addEventListener("click", () => {
       this.invertLR = !this.invertLR;

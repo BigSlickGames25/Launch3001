@@ -11,6 +11,9 @@ export class UI {
 
     this.status = document.getElementById("status");
 
+    this.settingsMenu = document.getElementById("settingsMenu");
+    this.btnMenu = document.getElementById("btnMenu");
+    this.btnMenuClose = document.getElementById("btnMenuClose");
     this.btnMotion = document.getElementById("btnMotion");
     this.btnCal = document.getElementById("btnCal");
     this.btnSens = document.getElementById("btnSens");
@@ -38,6 +41,14 @@ export class UI {
 
   setGravityScale(scale) {
     this.btnGrav.textContent = `Gravity: ${Math.round(scale * 100)}%`;
+  }
+
+  toggleMenu(force) {
+    const shouldShow =
+      typeof force === "boolean"
+        ? force
+        : this.settingsMenu.classList.contains("hidden");
+    this.settingsMenu.classList.toggle("hidden", !shouldShow);
   }
 
   update(dt, data) {

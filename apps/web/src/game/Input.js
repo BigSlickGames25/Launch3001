@@ -109,8 +109,12 @@ export class Input {
   _bindButtons() {
     this.ui.btnMotion.addEventListener("click", async () => {
       await this.enableMotion();
+      this.ui.toggleMenu(false);
     });
-    this.ui.btnCal.addEventListener("click", () => this.calibrate());
+    this.ui.btnCal.addEventListener("click", () => {
+      this.calibrate();
+      this.ui.toggleMenu(false);
+    });
   }
 
   _bindMotion() {
@@ -181,14 +185,16 @@ export class Input {
   update(dt) {
     const kx = (this.keys.right ? 1 : 0) - (this.keys.left ? 1 : 0);
     const ky = (this.keys.up ? 1 : 0) - (this.keys.down ? 1 : 0);
+    const xAxis = -(this.raw.x - this.bias.x + kx * this.keyboardAxisStrength);
+    const yAxis = this.raw.y - this.bias.y + ky * this.keyboardAxisStrength;
 
     const tx = clamp(
-      (this.raw.x - this.bias.x + kx * this.keyboardAxisStrength) * this.sensitivityScale,
+      xAxis * this.sensitivityScale,
       -1.2,
       1.2
     );
     const ty = clamp(
-      (this.raw.y - this.bias.y + ky * this.keyboardAxisStrength) * this.sensitivityScale,
+      yAxis * this.sensitivityScale,
       -1.2,
       1.2
     );

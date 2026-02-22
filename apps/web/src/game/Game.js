@@ -49,14 +49,27 @@ export class Game {
   }
 
   _bindUI() {
-    this.ui.btnReset.addEventListener("click", () => this.resetLevel());
+    this.ui.btnMenu.addEventListener("click", () => this.ui.toggleMenu());
+    this.ui.btnMenuClose.addEventListener("click", () => this.ui.toggleMenu(false));
+
+    this.ui.btnReset.addEventListener("click", () => {
+      this.resetLevel();
+      this.ui.toggleMenu(false);
+    });
     this.ui.btnCam.addEventListener("click", () => {
       this.camMode = (this.camMode === "CHASE") ? "COCKPIT" : "CHASE";
       this.ui.btnCam.textContent = `Cam: ${this.camMode === "CHASE" ? "Chase" : "Cockpit"}`;
       this.ui.setStatus(`CAM ${this.camMode}`, "ok");
+      this.ui.toggleMenu(false);
     });
-    this.ui.btnSens.addEventListener("click", () => this._cycleSensitivityDown());
-    this.ui.btnGrav.addEventListener("click", () => this._cycleGravityDown());
+    this.ui.btnSens.addEventListener("click", () => {
+      this._cycleSensitivityDown();
+      this.ui.toggleMenu(false);
+    });
+    this.ui.btnGrav.addEventListener("click", () => {
+      this._cycleGravityDown();
+      this.ui.toggleMenu(false);
+    });
   }
 
   _nextStepDown(current) {

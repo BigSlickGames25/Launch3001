@@ -126,7 +126,6 @@ export class Game {
 
   update(dt) {
     this.input.update(dt);
-    this._ceilingWarnCooldown = Math.max(0, this._ceilingWarnCooldown - dt);
 
     if (this.state === "READY" && (this.input.thrustHeld || Math.abs(this.input.tilt.x) > 0.05)) {
       this.state = "FLYING";
@@ -135,20 +134,6 @@ export class Game {
 
     if (this.state === "FLYING") {
       this.physics.apply(this.rocket, this.input, dt);
-
-      const ceilingY = this.world.flightCeilingY();
-      const rocketTopOffset = 0.9;
-      if (this.rocket.pos.y > ceilingY - rocketTopOffset) {
-        this.rocket.pos.y = ceilingY - rocketTopOffset;
-        if (this.rocket.vel.y > 0) this.rocket.vel.y *= -0.08;
-        this.rocket.vel.y = Math.min(this.rocket.vel.y, 0);
-        this.rocket.vel.x *= 0.985;
-        this.rocket.vel.z *= 0.985;
-        if (this._ceilingWarnCooldown <= 0) {
-          this.ui.setStatus("ALT LIMIT", "warn");
-          this._ceilingWarnCooldown = 0.45;
-        }
-      }
 
       const groundY = this.world.groundHeightAt(this.rocket.pos.x, this.rocket.pos.z);
 

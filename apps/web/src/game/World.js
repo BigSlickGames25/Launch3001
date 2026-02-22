@@ -4,6 +4,8 @@ export class World {
   constructor() {
     this.group = new THREE.Group();
     this._time = 0;
+    this.worldHalfX = 120;
+    this.worldHalfZ = 60;
     this._terrainProfile = null;
     this._craters = [];
     this._mountains = [];
@@ -207,7 +209,7 @@ export class World {
   }
 
   _createTerrain() {
-    this.terrainGeom = new THREE.PlaneGeometry(80, 40, 120, 60);
+    this.terrainGeom = new THREE.PlaneGeometry(this.worldHalfX * 2, this.worldHalfZ * 2, 240, 120);
     this.terrainGeom.rotateX(-Math.PI / 2);
 
     this.terrainBase = new THREE.Mesh(
@@ -437,11 +439,14 @@ export class World {
     };
 
     const rand = this._randFactory(74021);
-    const sideDepthBase = 4.8;
-    const sideZBase = 24.0;
+    const sideDepthBase = 5.2;
+    const sideZBase = this.worldHalfZ + 8;
+    const spanX = this.worldHalfX + 24;
+    const sideSegments = 34;
     for (const sign of [-1, 1]) {
-      for (let i = 0; i < 18; i++) {
-        const x = -40 + i * 4.8 + (rand() - 0.5) * 2.2;
+      for (let i = 0; i < sideSegments; i++) {
+        const t = sideSegments === 1 ? 0.5 : i / (sideSegments - 1);
+        const x = -spanX + t * spanX * 2 + (rand() - 0.5) * 2.6;
         const w = 3.2 + rand() * 3.6;
         const h = 6.0 + rand() * 7.0 + (i % 3 === 0 ? 2.0 : 0);
         const d = sideDepthBase + rand() * 3.6;
@@ -470,19 +475,22 @@ export class World {
     }
 
     // End walls to complete the canyon enclosure.
+    const endSegments = 14;
+    const spanZ = this.worldHalfZ + 10;
     for (const sign of [-1, 1]) {
-      for (let i = 0; i < 6; i++) {
-        const z = -18 + i * 7.2 + (rand() - 0.5) * 1.5;
+      for (let i = 0; i < endSegments; i++) {
+        const t = endSegments === 1 ? 0.5 : i / (endSegments - 1);
+        const z = -spanZ + t * spanZ * 2 + (rand() - 0.5) * 1.7;
         const w = 4.8 + rand() * 3.2;
         const h = 6.5 + rand() * 8.0;
         const d = 3.0 + rand() * 3.4;
-        const x = sign * (45.0 + rand() * 3.0);
+        const x = sign * (this.worldHalfX + 16 + rand() * 5.0);
         addRock(new THREE.BoxGeometry(d, h, w), rockMat, x, h * 0.5 - 0.5, z, (rand() - 0.5) * 0.06, (rand() - 0.5) * 0.1, (rand() - 0.5) * 0.06);
       }
     }
 
     // Low atmospheric floor haze to blend the canyon walls into the scene.
-    const haze = new THREE.Mesh(new THREE.RingGeometry(28, 56, 96), glowMat);
+    const haze = new THREE.Mesh(new THREE.RingGeometry(36, 92, 128), glowMat);
     haze.rotation.x = -Math.PI / 2;
     haze.position.y = 0.08;
     haze.receiveShadow = false;
@@ -524,9 +532,11 @@ export class World {
     if (!profile.craterCount || profile.craterCount <= 0) return;
 
     const rand = this._randFactory(profile.terrainSeed || 1);
+    const craterHalfX = this.worldHalfX * 0.9;
+    const craterHalfZ = this.worldHalfZ * 0.82;
     for (let i = 0; i < profile.craterCount; i++) {
-      const x = -34 + rand() * 68;
-      const z = -16 + rand() * 32;
+      const x = -craterHalfX + rand() * craterHalfX * 2;
+      const z = -craterHalfZ + rand() * craterHalfZ * 2;
       const radius = profile.craterRadiusMin + rand() * (profile.craterRadiusMax - profile.craterRadiusMin);
       const depth = profile.craterDepth * (0.55 + rand() * 0.85);
       const rim = profile.craterRim * (0.7 + rand() * 0.8);
@@ -868,13 +878,13 @@ export class World {
 
       const baseY = this.groundHeightAt(gate.x, gate.z) - 0.02;
       const frameT = Math.max(0.3, gate.frameThickness);
-      const depth = Math.max(0.8, gate.depth); // used as tunnel thickness baseline
-      const openW = Math.max(1.7, gate.openW); // lateral opening width (z axis)
-      const openH = Math.max(2.0, gate.openH);
-      const tunnelLen = Math.max(2.6, depth * 3.6 + frameT * 2.4); // route direction (x axis)
-      const ribCount = Math.max(3, Math.min(8, Math.round(tunnelLen / 0.85)));
+      const depth = Math.max(1.3, gate.depth); // used as tunnel thickness baseline
+      const openW = Math.max(3.8, gate.openW); // lateral opening width (z axis)
+      const openH = Math.max(4.3, gate.openH);
+      const tunnelLen = Math.max(6.5, depth * 6.8 + openW * 0.9 + frameT * 3.0); // route direction (x axis)
+      const ribCount = Math.max(5, Math.min(14, Math.round(tunnelLen / 1.05)));
       const beamH = Math.max(0.34, frameT * 1.15);
-      const openingFloorY = baseY + 0.45;
+      const openingFloorY = baseY + 0.2;
       const beamBottomY = openingFloorY + openH;
       this._tunnelOpeningTopY = Math.max(this._tunnelOpeningTopY, beamBottomY);
       const topBeamCenterY = beamBottomY + beamH * 0.5;
@@ -908,7 +918,7 @@ export class World {
       gateGroup.add(topBeam);
       this._pushTunnelCollisionBox(topBeam.position.x, topBeam.position.y, topBeam.position.z, tunnelLen, beamH, capWidthZ);
 
-      const shellRoofH = Math.max(0.28, frameT * 1.1);
+      const shellRoofH = Math.max(0.34, frameT * 1.2);
       const shellRoofY = topBeamCenterY + beamH * 0.5 + shellRoofH * 0.45;
       const shellRoof = new THREE.Mesh(new THREE.BoxGeometry(tunnelLen, shellRoofH, tunnelOuterZ), rockMat);
       shellRoof.position.set(gate.x, shellRoofY, gate.z);
@@ -917,7 +927,7 @@ export class World {
       gateGroup.add(shellRoof);
       this._pushTunnelCollisionBox(shellRoof.position.x, shellRoof.position.y, shellRoof.position.z, tunnelLen, shellRoofH, tunnelOuterZ);
 
-      const shellSideH = Math.max(0.75, openH * 0.7);
+      const shellSideH = Math.max(1.1, openH * 0.82);
       const shellSideY = openingFloorY + shellSideH * 0.5 + 0.05;
       const shellSideZ = openW * 0.5 + frameT * 1.35;
       for (const sign of [-1, 1]) {
@@ -931,7 +941,7 @@ export class World {
 
       // Thin illuminated trim around the opening makes the tunnel readable on fast approaches.
       const trimT = Math.max(0.04, frameT * 0.16);
-      const trimFrameZ = Math.max(0.03, frameT * 0.48);
+      const trimFrameZ = Math.max(0.04, frameT * 0.55);
       const trimInsetX = tunnelLen * 0.5 - trimT * 0.5;
       for (const end of [-1, 1]) {
         const endX = gate.x + trimInsetX * end;
@@ -951,7 +961,7 @@ export class World {
         topTrim.castShadow = false;
         gateGroup.add(topTrim);
 
-        const glowPanel = new THREE.Mesh(new THREE.PlaneGeometry(openW * 0.92, openH * 0.92), glowMat);
+        const glowPanel = new THREE.Mesh(new THREE.PlaneGeometry(openW * 0.96, openH * 0.96), glowMat);
         glowPanel.position.set(gate.x + (tunnelLen * 0.5 + 0.02) * end, openingFloorY + openH * 0.5, gate.z);
         glowPanel.rotation.y = end > 0 ? -Math.PI / 2 : Math.PI / 2;
         glowPanel.castShadow = false;
@@ -980,6 +990,24 @@ export class World {
         ribTop.position.set(ribX, topBeamCenterY, gate.z);
         ribTop.castShadow = false;
         gateGroup.add(ribTop);
+      }
+
+      // Exterior rock masses to make these read more like cave/tunnel cuts than sci-fi gates.
+      const lumpCount = 4;
+      for (let i = 0; i < lumpCount; i++) {
+        const endSign = i < 2 ? -1 : 1;
+        const sideSign = (i % 2 === 0) ? -1 : 1;
+        const lump = new THREE.Mesh(new THREE.DodecahedronGeometry(1, 0), rockMat);
+        lump.position.set(
+          gate.x + endSign * (tunnelLen * 0.35 + Math.random() * 0.8),
+          openingFloorY + openH * (0.65 + Math.random() * 0.35),
+          gate.z + sideSign * (openW * 0.7 + Math.random() * 0.6)
+        );
+        lump.rotation.set(Math.random() * Math.PI, Math.random() * Math.PI, Math.random() * Math.PI);
+        lump.scale.set(1.4 + Math.random() * 1.3, 1.1 + Math.random() * 1.6, 1.2 + Math.random() * 1.3);
+        lump.castShadow = true;
+        lump.receiveShadow = true;
+        gateGroup.add(lump);
       }
 
       this.routeFeatures.add(gateGroup);

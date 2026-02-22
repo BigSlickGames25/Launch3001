@@ -21,6 +21,9 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
@@ -29,12 +32,14 @@ jobs:
           cache-dependency-path: "apps/web/package-lock.json"
 
       - name: Install dependencies
-        run: npm ci
-        working-directory: apps/web
+        run: |
+          cd apps/web
+          npm ci
 
       - name: Build web app
-        run: npm run build
-        working-directory: apps/web
+        run: |
+          cd apps/web
+          npm run build
         env:
           VITE_BASE_PATH: "/Launch3001/"
 

@@ -36,7 +36,7 @@ jobs:
         run: npm run build
         working-directory: apps/web
         env:
-          VITE_BASE_PATH: "/Launch-3001/"
+          VITE_BASE_PATH: "/Launch3001/"
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3

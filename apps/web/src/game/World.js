@@ -4,22 +4,25 @@ export class World {
   constructor() {
     this.group = new THREE.Group();
     this._time = 0;
+    this._terrainProfile = null;
+    this._craters = [];
 
-    const hemi = new THREE.HemisphereLight(0x88ffff, 0x110022, 0.9);
+    const hemi = new THREE.HemisphereLight(0x99cfff, 0x0f0818, 0.95);
     this.group.add(hemi);
 
-    const dir = new THREE.DirectionalLight(0xffffff, 0.8);
+    const dir = new THREE.DirectionalLight(0xeef6ff, 1.05);
     dir.position.set(10, 16, 7);
     dir.castShadow = true;
     dir.shadow.mapSize.set(1024, 1024);
     dir.shadow.camera.near = 1;
-    dir.shadow.camera.far = 60;
-    dir.shadow.camera.left = -24;
-    dir.shadow.camera.right = 24;
-    dir.shadow.camera.top = 24;
-    dir.shadow.camera.bottom = -24;
+    dir.shadow.camera.far = 70;
+    dir.shadow.camera.left = -28;
+    dir.shadow.camera.right = 28;
+    dir.shadow.camera.top = 28;
+    dir.shadow.camera.bottom = -28;
     dir.shadow.bias = -0.00025;
     this.group.add(dir);
+    this.sunLight = dir;
 
     this.skyDome = this._createSkyDome();
     this.group.add(this.skyDome);
@@ -61,8 +64,26 @@ export class World {
     this.roof.receiveShadow = true;
     this.group.add(this.roof);
 
+    this.launchPadHalf = 1.5;
+    this.landingPadHalf = 1.5;
     this.spawn = new THREE.Vector3(-10, this.launchPadTopY() + 0.6, 0);
-    this.padHalf = 1.5;
+
+    // Initialize with a flat profile; real values are applied per level.
+    this._applyTerrainProfile({
+      terrainAmp: 0,
+      terrainRidge: 0,
+      terrainDetail: 0,
+      terrainFreqX: 0.08,
+      terrainFreqZ: 0.08,
+      terrainDiagFreq: 0.05,
+      craterCount: 0,
+      craterDepth: 0,
+      craterRadiusMin: 1.2,
+      craterRadiusMax: 2.8,
+      craterRim: 0,
+      terrainSeed: 1,
+      corridorHalfWidth: 6
+    });
   }
 
   _createSkyDome() {
@@ -149,82 +170,225 @@ export class World {
   }
 
   _createTerrain() {
-    const geom = new THREE.PlaneGeometry(80, 40, 80, 40);
-    geom.rotateX(-Math.PI / 2);
+    this.terrainGeom = new THREE.PlaneGeometry(80, 40, 120, 60);
+    this.terrainGeom.rotateX(-Math.PI / 2);
 
-    const pos = geom.attributes.position;
-    for (let i = 0; i < pos.count; i++) {
-      const x = pos.getX(i);
-      const z = pos.getZ(i);
-      const y = Math.sin(x * 0.18) * 0.5 + Math.cos(z * 0.22) * 0.35;
-      pos.setY(i, y);
-    }
-    pos.needsUpdate = true;
-    geom.computeVertexNormals();
-
-    const base = new THREE.Mesh(
-      geom,
+    this.terrainBase = new THREE.Mesh(
+      this.terrainGeom,
       new THREE.MeshStandardMaterial({
-        color: 0x05070c,
-        emissive: 0x00080f,
-        emissiveIntensity: 0.35,
-        metalness: 0.1,
-        roughness: 0.95
+        color: 0x4b4d52,
+        emissive: 0x07090b,
+        emissiveIntensity: 0.08,
+        metalness: 0.02,
+        roughness: 0.98
       })
     );
-    base.receiveShadow = true;
-    base.position.y = -0.01;
+    this.terrainBase.position.y = -0.012;
+    this.terrainBase.receiveShadow = true;
 
-    const wire = new THREE.Mesh(
-      geom,
+    this.terrainWire = new THREE.Mesh(
+      this.terrainGeom,
       new THREE.MeshStandardMaterial({
-        color: 0x0d1530,
-        emissive: 0x08243a,
-        emissiveIntensity: 0.55,
-        metalness: 0.2,
-        roughness: 0.8,
+        color: 0x6d7783,
+        emissive: 0x0a1017,
+        emissiveIntensity: 0.08,
+        metalness: 0.0,
+        roughness: 0.95,
         wireframe: true,
         transparent: true,
-        opacity: 0.95
+        opacity: 0.15
       })
     );
-    wire.receiveShadow = false;
+    this.terrainWire.receiveShadow = false;
 
     const terrainGroup = new THREE.Group();
-    terrainGroup.add(base);
-    terrainGroup.add(wire);
+    terrainGroup.add(this.terrainBase);
+    terrainGroup.add(this.terrainWire);
     return terrainGroup;
   }
 
   _createPad(color) {
     const g = new THREE.BoxGeometry(3, 1, 3);
-    const m = new THREE.MeshStandardMaterial({ color, emissive: color, emissiveIntensity: 0.25, metalness: 0.5, roughness: 0.2 });
+    const m = new THREE.MeshStandardMaterial({
+      color,
+      emissive: color,
+      emissiveIntensity: 0.25,
+      metalness: 0.5,
+      roughness: 0.2
+    });
     return new THREE.Mesh(g, m);
   }
 
   _createRoof() {
     const g = new THREE.BoxGeometry(20, 1, 18);
-    const m = new THREE.MeshStandardMaterial({ color: 0x9900ff, emissive: 0x220022, emissiveIntensity: 0.2, transparent: true, opacity: 0.35 });
+    const m = new THREE.MeshStandardMaterial({
+      color: 0x9900ff,
+      emissive: 0x220022,
+      emissiveIntensity: 0.2,
+      transparent: true,
+      opacity: 0.35
+    });
     const roof = new THREE.Mesh(g, m);
     roof.position.set(2, 7.0, 0);
     return roof;
   }
 
+  _randFactory(seed) {
+    let s = (seed | 0) || 1;
+    return () => {
+      s = (s * 1664525 + 1013904223) >>> 0;
+      return s / 4294967296;
+    };
+  }
+
+  _smoothstep(edge0, edge1, x) {
+    const t = Math.max(0, Math.min(1, (x - edge0) / (edge1 - edge0 || 1)));
+    return t * t * (3 - 2 * t);
+  }
+
+  _generateCraters(profile) {
+    this._craters = [];
+    if (!profile.craterCount || profile.craterCount <= 0) return;
+
+    const rand = this._randFactory(profile.terrainSeed || 1);
+    for (let i = 0; i < profile.craterCount; i++) {
+      const x = -34 + rand() * 68;
+      const z = -16 + rand() * 32;
+      const radius = profile.craterRadiusMin + rand() * (profile.craterRadiusMax - profile.craterRadiusMin);
+      const depth = profile.craterDepth * (0.55 + rand() * 0.85);
+      const rim = profile.craterRim * (0.7 + rand() * 0.8);
+      this._craters.push({ x, z, radius, depth, rim });
+    }
+  }
+
+  _terrainHeightRaw(x, z) {
+    const p = this._terrainProfile;
+    if (!p) return 0;
+    if (p.terrainAmp <= 0 && p.craterCount <= 0) return 0;
+
+    let y = 0;
+    const seed = p.terrainSeed || 1;
+
+    y += Math.sin(x * p.terrainFreqX + seed * 0.71) * p.terrainAmp * 0.42;
+    y += Math.cos(z * p.terrainFreqZ - seed * 0.43) * p.terrainAmp * 0.35;
+    y += Math.sin((x + z) * p.terrainDiagFreq + seed * 0.33) * p.terrainRidge * 0.4;
+    y += Math.cos((x - z) * (p.terrainDiagFreq * 0.78) - seed * 0.21) * p.terrainRidge * 0.28;
+    y += Math.sin(x * 0.31 + seed) * Math.cos(z * 0.27 - seed * 0.6) * p.terrainDetail;
+
+    for (const c of this._craters) {
+      const dx = x - c.x;
+      const dz = z - c.z;
+      const d = Math.sqrt(dx * dx + dz * dz) / c.radius;
+
+      if (d < 1.35) {
+        if (d < 1) {
+          const bowl = 1 - d * d;
+          y -= bowl * c.depth;
+        }
+        const rimFalloff = (d - 1.02) / 0.22;
+        y += Math.exp(-(rimFalloff * rimFalloff)) * c.rim;
+      }
+    }
+
+    return y;
+  }
+
+  _flattenAround(y, x, z, cx, cz, flatRadius, blendRadius) {
+    const dx = x - cx;
+    const dz = z - cz;
+    const d = Math.sqrt(dx * dx + dz * dz);
+    if (d <= flatRadius) return 0;
+    if (d >= blendRadius) return y;
+    const t = this._smoothstep(flatRadius, blendRadius, d);
+    return y * t;
+  }
+
+  _terrainHeightAt(x, z) {
+    let y = this._terrainHeightRaw(x, z);
+    const p = this._terrainProfile || {};
+
+    const launchBlend = this.launchPadHalf + 1.7;
+    const landingBlend = this.landingPadHalf + 2.0;
+    y = this._flattenAround(y, x, z, this.launchPad.position.x, this.launchPad.position.z, this.launchPadHalf + 0.55, launchBlend);
+    y = this._flattenAround(y, x, z, this.landingPad.position.x, this.landingPad.position.z, this.landingPadHalf + 0.65, landingBlend);
+
+    const corridorHalf = p.corridorHalfWidth ?? 4.5;
+    if (corridorHalf > 0 && x > this.launchPad.position.x - 1.5 && x < this.landingPad.position.x + 2.5) {
+      const az = Math.abs(z);
+      if (az < corridorHalf + 1.2) {
+        const t = this._smoothstep(corridorHalf, corridorHalf + 1.2, az);
+        y *= t;
+      }
+    }
+
+    return Math.max(-2.8, Math.min(4.8, y));
+  }
+
+  _applyTerrainProfile(level) {
+    this._terrainProfile = {
+      terrainAmp: level.terrainAmp ?? 0,
+      terrainRidge: level.terrainRidge ?? 0,
+      terrainDetail: level.terrainDetail ?? 0,
+      terrainFreqX: level.terrainFreqX ?? 0.1,
+      terrainFreqZ: level.terrainFreqZ ?? 0.09,
+      terrainDiagFreq: level.terrainDiagFreq ?? 0.07,
+      craterCount: level.craterCount ?? 0,
+      craterDepth: level.craterDepth ?? 0,
+      craterRadiusMin: level.craterRadiusMin ?? 1.2,
+      craterRadiusMax: level.craterRadiusMax ?? 3.0,
+      craterRim: level.craterRim ?? 0,
+      terrainSeed: level.terrainSeed ?? 1,
+      corridorHalfWidth: level.corridorHalfWidth ?? 4.5
+    };
+
+    this._generateCraters(this._terrainProfile);
+
+    const pos = this.terrainGeom.attributes.position;
+    for (let i = 0; i < pos.count; i++) {
+      const x = pos.getX(i);
+      const z = pos.getZ(i);
+      pos.setY(i, this._terrainHeightAt(x, z));
+    }
+    pos.needsUpdate = true;
+    this.terrainGeom.computeVertexNormals();
+
+    const amp = this._terrainProfile.terrainAmp;
+    const moonShade = Math.max(0, Math.min(1, amp / 2.8));
+    this.terrainBase.material.color.setRGB(
+      0.28 + moonShade * 0.08,
+      0.29 + moonShade * 0.08,
+      0.31 + moonShade * 0.09
+    );
+    this.terrainWire.material.opacity = 0.06 + moonShade * 0.1;
+  }
+
   applyLevel(level) {
-    const size = level.padSize ?? 3.0;
-    this.launchPad.scale.set(size / 3, 1, size / 3);
-    this.landingPad.scale.set(size / 3, 1, size / 3);
-    this.padHalf = (size / 2);
+    const launchSize = level.launchPadSize ?? level.padSize ?? 3.0;
+    const landingSize = level.landingPadSize ?? level.padSize ?? 3.0;
+
+    this.launchPad.scale.set(launchSize / 3, 1, launchSize / 3);
+    this.landingPad.scale.set(landingSize / 3, 1, landingSize / 3);
+    this.launchPadHalf = launchSize / 2;
+    this.landingPadHalf = landingSize / 2;
+
     this.roof.visible = !!level.roof;
+    this.roof.position.y = level.roofHeight ?? 7.0;
+    this.roof.scale.set(level.roofScaleX ?? 1, 1, level.roofScaleZ ?? 1);
+
+    this._applyTerrainProfile(level);
   }
 
   groundHeightAt(x, z) {
-    return Math.sin(x * 0.18) * 0.5 + Math.cos(z * 0.22) * 0.35;
+    return this._terrainHeightAt(x, z);
   }
 
   checkRoofCollision(pos) {
     if (!this.roof.visible) return false;
-    const half = { x: 10, y: 0.5, z: 9 };
+    const half = {
+      x: 10 * this.roof.scale.x,
+      y: 0.5 * this.roof.scale.y,
+      z: 9 * this.roof.scale.z
+    };
     const c = this.roof.position;
     return (
       Math.abs(pos.x - c.x) < half.x &&
@@ -235,12 +399,12 @@ export class World {
 
   isOverLandingPad(pos) {
     const c = this.landingPad.position;
-    return Math.abs(pos.x - c.x) <= this.padHalf && Math.abs(pos.z - c.z) <= this.padHalf;
+    return Math.abs(pos.x - c.x) <= this.landingPadHalf && Math.abs(pos.z - c.z) <= this.landingPadHalf;
   }
 
   isOverLaunchPad(pos) {
     const c = this.launchPad.position;
-    return Math.abs(pos.x - c.x) <= this.padHalf && Math.abs(pos.z - c.z) <= this.padHalf;
+    return Math.abs(pos.x - c.x) <= this.launchPadHalf && Math.abs(pos.z - c.z) <= this.launchPadHalf;
   }
 
   landingPadTopY() {

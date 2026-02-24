@@ -1,5 +1,5 @@
-const TOTAL_LEVELS = 100;
-const TUNING_SPAN_LEVELS = 15;
+const TOTAL_LEVELS = 10;
+const TUNING_SPAN_LEVELS = TOTAL_LEVELS;
 
 export const LEVELS = Array.from({ length: TOTAL_LEVELS }, (_, idx) => {
   const tunedIdx = Math.min(idx, TUNING_SPAN_LEVELS - 1);

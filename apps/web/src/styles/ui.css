@@ -597,7 +597,7 @@ button:active{
   left: calc(12px + var(--safe-left));
   right: calc(12px + var(--safe-right));
   bottom: calc(12px + var(--safe-bottom));
-  display: flex;
+  display: none;
   align-items: flex-end;
   justify-content: space-between;
   gap: 14px;
@@ -607,6 +607,12 @@ button:active{
 
 #mobileControls.swap-sides{
   flex-direction: row-reverse;
+}
+
+@media (pointer: coarse){
+  #mobileControls{
+    display: flex;
+  }
 }
 
 .control-cluster{
@@ -937,9 +943,13 @@ button:active{
 
 /* Score-only HUD mode for gameplay focus */
 .score-only-ui #hud{
-  grid-template-columns: minmax(170px, 220px);
+  grid-template-columns: minmax(132px, 170px);
   right: auto;
   width: auto;
+}
+
+.score-only-ui #uiAtmos{
+  display: none !important;
 }
 
 .score-only-ui .hud-center,
@@ -949,8 +959,17 @@ button:active{
 }
 
 .score-only-ui .hud-stats{
-  min-width: 170px;
-  padding: 10px;
+  min-width: 132px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+.score-only-ui .hud-stats::before{
+  display: none;
 }
 
 .score-only-ui .hud-stats .card-title{
@@ -958,9 +977,21 @@ button:active{
 }
 
 .score-only-ui .hud-stats .row{
-  margin-top: 6px;
-  min-height: 31px;
-  padding: 7px 10px;
+  margin-top: 4px;
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  font-size: 12px;
+  line-height: 1.25;
+}
+
+.score-only-ui .hud-stats .k{
+  font-size: 10px;
+  letter-spacing: 0.9px;
+  color: rgba(206, 230, 240, 0.72);
 }
 
 .score-only-ui .hud-stats .row:first-of-type{
@@ -969,7 +1000,7 @@ button:active{
 
 @media (max-width: 720px){
   .score-only-ui #hud{
-    grid-template-columns: minmax(156px, 1fr);
+    grid-template-columns: minmax(132px, 1fr);
     grid-template-areas: none;
     right: calc(10px + var(--safe-right));
   }

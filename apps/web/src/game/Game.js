@@ -272,9 +272,10 @@ export class Game {
 
     if (this.camMode !== "SIDE") {
       const climb = Math.max(0, p.y - (this.world.launchPadTopY() + 0.6));
+      const routeSpan = Math.max(16, Math.abs(this.world.landingPad.position.x - this.world.spawn.x));
       const distToPad = Math.abs(this.world.landingPad.position.x - p.x);
-      const padZoom = clamp(distToPad / 26, 0, 1.2);
-      const zoomOut = Math.max(clamp(climb / 12, 0, 1.2), padZoom * 0.65);
+      const padZoom = clamp(distToPad / routeSpan, 0, 1);
+      const zoomOut = Math.max(clamp(climb / 12, 0, 1.0), padZoom * 0.5);
 
       const side = 6 + zoomOut * 3;
       const up = 4.5 + zoomOut * 7.5;
@@ -287,20 +288,24 @@ export class Game {
       this._camB.set(p.x, p.y + 0.95, p.z);
       this.camera.lookAt(this._camB.x, this._camB.y, this._camB.z);
 
-      this.camera.fov = 65 + zoomOut * 17;
+      this.camera.fov = 62 + zoomOut * 12;
       this.camera.updateProjectionMatrix();
     } else {
+      const routeSpan = Math.max(16, Math.abs(this.world.landingPad.position.x - this.world.spawn.x));
       const distToPad = Math.abs(this.world.landingPad.position.x - p.x);
-      const padZoom = clamp(distToPad / 26, 0, 1.35);
-      const camHeight = 2.2 + padZoom * 3.8;
-      const camDepth = 8.8 + padZoom * 9.8;
+      const padZoom = clamp(distToPad / routeSpan, 0, 1);
+      const speed = this.rocket.vel.length();
+      const speedZoom = clamp(speed / 10, 0, 1);
+      const zoom = Math.max(padZoom * 0.7, speedZoom * 0.6);
+      const camHeight = 1.9 + zoom * 2.6;
+      const camDepth = 7.2 + zoom * 6.2;
 
       // Side-scroller framing: keep the rocket centered and zoom out with route distance.
       this._camA.set(p.x, p.y + camHeight, p.z + camDepth);
       this.camera.position.lerp(this._camA, 0.14);
       this._camB.set(p.x, p.y + 0.85, p.z);
       this.camera.lookAt(this._camB.x, this._camB.y, this._camB.z);
-      this.camera.fov = 54 + padZoom * 18;
+      this.camera.fov = 50 + zoom * 10;
       this.camera.updateProjectionMatrix();
     }
 

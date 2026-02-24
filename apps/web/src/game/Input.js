@@ -23,11 +23,15 @@ export class Input {
     this.responseExpo = { x: 1.4, y: 1.18 };
     this._hasMotionSample = false;
     this._joyPointerId = null;
+    this.scoreOnlyUI = !!document.getElementById("app")?.classList.contains("score-only-ui");
     const storedSteerMode = localStorage.getItem("launcher_steer_mode");
-    this.steerMode =
-      storedSteerMode === "TABLETOP" || storedSteerMode === "JOYSTICK"
-        ? storedSteerMode
-        : "UPRIGHT";
+    this.steerMode = this.scoreOnlyUI
+      ? "JOYSTICK"
+      : (
+        storedSteerMode === "TABLETOP" || storedSteerMode === "JOYSTICK"
+          ? storedSteerMode
+          : "UPRIGHT"
+      );
     this.swapControlSides = localStorage.getItem("launcher_swap_control_sides") === "1";
     this.invertLR = localStorage.getItem("launcher_invert_lr") === "1";
     this.invertFB = localStorage.getItem("launcher_invert_fb") === "1";
@@ -43,6 +47,7 @@ export class Input {
     this._bindButtons();
     this._bindMotion();
     this.ui.setSteerMode(this.steerMode);
+    if (this.scoreOnlyUI) localStorage.setItem("launcher_steer_mode", "JOYSTICK");
     this.ui.setControlSidesSwapped(this.swapControlSides);
     this.ui.setInvertLR(this.invertLR);
     this.ui.setInvertFB(this.invertFB);

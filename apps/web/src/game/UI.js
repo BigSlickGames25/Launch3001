@@ -1,5 +1,7 @@
 export class UI {
   constructor() {
+    this.app = document.getElementById("app");
+
     this.lvl = document.getElementById("lvl");
     this.score = document.getElementById("score");
     this.best = document.getElementById("best");
@@ -13,6 +15,7 @@ export class UI {
     this.joystickStick = document.getElementById("joystickStick");
     this.btnBoost = document.getElementById("btnBoost");
 
+    this.menuScrim = document.getElementById("menuScrim");
     this.settingsMenu = document.getElementById("settingsMenu");
     this.btnMenu = document.getElementById("btnMenu");
     this.btnMenuClose = document.getElementById("btnMenuClose");
@@ -34,27 +37,45 @@ export class UI {
 
     this._statusTimer = 0;
     this._statusBase = "READY";
+    this._bannerMode = "info";
+    this._menuOpen = false;
+
+    if (this.menuScrim && this.settingsMenu) {
+      this.menuScrim.addEventListener("click", () => this.toggleMenu(false));
+    }
+
     this.setJoystickVisible(false);
     this.setBoostActive(false);
+    this.setPauseState(false);
+    this.setBanner("READY", "info", 0);
+  }
+
+  setBanner(text, mode = "info", ttl = 1.1) {
+    this._statusBase = text;
+    this._bannerMode = mode;
+    if (!this.status) return;
+    this.status.textContent = text;
+    this.status.dataset.mode = mode;
+    this.status.classList.remove("show");
+    // Force restart animation.
+    void this.status.offsetWidth;
+    this.status.classList.add("show");
+    this._statusTimer = ttl;
   }
 
   setStatus(text, mode = "info") {
-    this._statusBase = text;
-    this.status.textContent = text;
-    this.status.style.color =
-      mode === "warn" ? "rgba(255,90,90,0.95)" :
-      mode === "ok" ? "rgba(80,255,160,0.95)" :
-      "rgba(0,255,255,0.9)";
-    this._statusTimer = 1.2;
+    this.setBanner(text, mode, 1.1);
   }
 
   setSensitivityScale(scale) {
+    if (!this.sensValue || !this.sensRange) return;
     const pct = Math.round(scale * 100);
     this.sensValue.textContent = `${pct}%`;
     this.sensRange.value = String(pct);
   }
 
   setGravityScale(scale) {
+    if (!this.gravValue || !this.gravRange) return;
     const pct = Math.round(scale * 100);
     this.gravValue.textContent = `${pct}%`;
     this.gravRange.value = String(pct);
@@ -77,6 +98,7 @@ export class UI {
   }
 
   setSteerMode(mode) {
+    if (!this.btnSteer) return;
     const label =
       mode === "TABLETOP" ? "Tabletop" :
       mode === "JOYSTICK" ? "Joystick" :
@@ -86,7 +108,7 @@ export class UI {
   }
 
   setInvertLR(enabled) {
-    this.btnInvertLR.textContent = `Invert L/R: ${enabled ? "On" : "Off"}`;
+    if (this.btnInvertLR) this.btnInvertLR.textContent = `Invert L/R: ${enabled ? "On" : "Off"}`;
   }
 
   setControlSidesSwapped(enabled) {
@@ -99,7 +121,7 @@ export class UI {
   }
 
   setInvertFB(enabled) {
-    this.btnInvertFB.textContent = `Invert F/B: ${enabled ? "On" : "Off"}`;
+    if (this.btnInvertFB) this.btnInvertFB.textContent = `Invert F/B: ${enabled ? "On" : "Off"}`;
   }
 
   setGyroPreview(x, y) {
@@ -113,7 +135,7 @@ export class UI {
     const mag = Math.min(1, Math.hypot(cx, cy));
 
     this.gyroBall.style.transform = `translate(calc(-50% + ${dx.toFixed(1)}px), calc(-50% + ${dy.toFixed(1)}px))`;
-    this.gyroBall.style.boxShadow = `0 0 ${10 + Math.round(mag * 14)}px rgba(0,255,255,0.9)`;
+    this.gyroBall.style.boxShadow = `0 0 ${10 + Math.round(mag * 14)}px rgba(64,214,255,0.75)`;
   }
 
   setJoystickVisible(visible) {
@@ -126,7 +148,7 @@ export class UI {
 
     const cx = Math.max(-1, Math.min(1, x || 0));
     const cy = Math.max(-1, Math.min(1, y || 0));
-    const radius = Math.max(14, (Math.min(this.joystickPad.clientWidth, this.joystickPad.clientHeight) * 0.5) - 26);
+    const radius = Math.max(14, (Math.min(this.joystickPad.clientWidth, this.joystickPad.clientHeight) * 0.5) - 24);
     const dx = cx * radius;
     const dy = cy * radius;
     const mag = Math.min(1, Math.hypot(cx, cy));
@@ -141,24 +163,45 @@ export class UI {
     this.btnBoost.setAttribute("aria-pressed", active ? "true" : "false");
   }
 
+  showPauseDrawer(open) {
+    this.toggleMenu(open);
+  }
+
+  setPauseState(paused) {
+    if (this.app) this.app.classList.toggle("paused", !!paused);
+    if (this.btnMenu) this.btnMenu.setAttribute("aria-pressed", paused ? "true" : "false");
+  }
+
+  isMenuOpen() {
+    return !!this._menuOpen;
+  }
+
   toggleMenu(force) {
-    const shouldShow =
-      typeof force === "boolean"
-        ? force
-        : this.settingsMenu.classList.contains("hidden");
-    this.settingsMenu.classList.toggle("hidden", !shouldShow);
+    if (!this.settingsMenu) return false;
+
+    const next = typeof force === "boolean"
+      ? force
+      : this.settingsMenu.classList.contains("hidden");
+
+    this._menuOpen = !!next;
+    this.settingsMenu.classList.toggle("hidden", !next);
+    if (this.menuScrim) this.menuScrim.classList.toggle("hidden", !next);
+    this.setPauseState(next);
+    return next;
   }
 
   update(dt, data) {
     if (this._statusTimer > 0) {
       this._statusTimer -= dt;
-      if (this._statusTimer <= 0) this.status.textContent = this._statusBase;
+      if (this._statusTimer <= 0 && this.status) {
+        this.status.classList.remove("show");
+      }
     }
 
     if (!data) return;
-    this.lvl.textContent = data.level;
-    this.score.textContent = data.score;
-    this.best.textContent = data.best;
+    if (this.lvl) this.lvl.textContent = data.level;
+    if (this.score) this.score.textContent = data.score;
+    if (this.best) this.best.textContent = data.best;
     this.setGyroPreview(data.tiltX, data.tiltY);
   }
 }

@@ -23,7 +23,8 @@ export class Input {
     this.responseExpo = { x: 1.4, y: 1.18 };
     this._hasMotionSample = false;
     this._joyPointerId = null;
-    this.scoreOnlyUI = !!document.getElementById("app")?.classList.contains("score-only-ui");
+    this.scoreOnlyUI = !!document.getElementById("app")?.classList.contains("side-scroll-ui")
+      || !!document.getElementById("app")?.classList.contains("score-only-ui");
     const storedSteerMode = localStorage.getItem("launcher_steer_mode");
     this.steerMode = this.scoreOnlyUI
       ? "JOYSTICK"

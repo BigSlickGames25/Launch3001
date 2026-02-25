@@ -1,1089 +1,715 @@
 import * as THREE from "three";
+import { clamp, lerp } from "./utils.js";
+
+function smooth01(t) {
+  const s = clamp(t, 0, 1);
+  return s * s * (3 - 2 * s);
+}
+
+function bell01(t) {
+  return Math.sin(smooth01(t) * Math.PI);
+}
+
+function fract(v) {
+  return v - Math.floor(v);
+}
+
+function hash1(v) {
+  return fract(Math.sin(v * 127.1 + 311.7) * 43758.5453123);
+}
+
+function hash2(x, y) {
+  return fract(Math.sin(x * 12.9898 + y * 78.233) * 43758.5453123);
+}
 
 export class World {
   constructor() {
     this.group = new THREE.Group();
     this._time = 0;
-    this.worldHalfX = 120;
-    this.worldHalfZ = 60;
-    this._terrainProfile = null;
-    this._craters = [];
-    this._mountains = [];
-    this._chasms = [];
-    this._centerSpires = [];
-    this._tunnelGates = [];
-    this._tunnelCollisionBoxes = [];
-    this._terrainPeakY = 0;
-    this._routePeakY = 0;
-    this._tunnelOpeningTopY = 0;
-    this._flightCeilingY = 12;
-    this._canyonHazeBaseOpacity = 0.08;
+    this.level = null;
 
-    const hemi = new THREE.HemisphereLight(0x99cfff, 0x0f0818, 0.95);
-    this.group.add(hemi);
+    this.routeStartX = -20;
+    this.routeEndX = 20;
+    this.visualStartX = -28;
+    this.visualEndX = 28;
+    this.finishApproachX = 12;
 
-    const dir = new THREE.DirectionalLight(0xeef6ff, 1.05);
-    dir.position.set(10, 16, 7);
-    dir.castShadow = true;
-    dir.shadow.mapSize.set(1024, 1024);
-    dir.shadow.camera.near = 1;
-    dir.shadow.camera.far = 70;
-    dir.shadow.camera.left = -28;
-    dir.shadow.camera.right = 28;
-    dir.shadow.camera.top = 28;
-    dir.shadow.camera.bottom = -28;
-    dir.shadow.bias = -0.00025;
-    this.group.add(dir);
-    this.sunLight = dir;
+    this.launchPadHalf = 1.7;
+    this.landingPadHalf = 3.0;
+    this.spawn = new THREE.Vector3(-18, 1.6, 0);
 
-    this.skyDome = this._createSkyDome();
-    this.group.add(this.skyDome);
+    this._profileSamples = [];
+    this._sampleCount = 260;
+    this._obstacleColliders = [];
+    this._obstacleMeshes = [];
+    this._levelObjects = [];
+    this._lightsPulse = [];
 
-    this.starField = this._createStarField();
-    this.group.add(this.starField);
+    this._tmpV = new THREE.Vector3();
+    this._tmpColor = new THREE.Color();
 
-    this.horizonGlowA = this._createHorizonGlow(24, 36, 0x00ddff, 0.18);
-    this.group.add(this.horizonGlowA);
-    this.horizonGlowB = this._createHorizonGlow(28, 44, 0xff2bd6, 0.1);
-    this.group.add(this.horizonGlowB);
-
-    this.terrain = this._createTerrain();
-    this.group.add(this.terrain);
-
-    this.canyonRim = this._createCanyonRim();
-    this.group.add(this.canyonRim);
-
-    this.routeFeatures = new THREE.Group();
-    this.group.add(this.routeFeatures);
-
-    this.launchPad = this._createLaunchPad();
-    this.launchPad.position.set(-10, 0.5, 0);
-    this.launchPad.castShadow = true;
-    this.launchPad.receiveShadow = true;
-    this.group.add(this.launchPad);
-
-    this.landingPad = this._createLandingPad();
-    this.landingPad.position.set(12, 0.5, 0);
-    this.landingPad.castShadow = true;
-    this.landingPad.receiveShadow = true;
-    this.group.add(this.landingPad);
-
-    this.launchGlow = new THREE.PointLight(0x00ffff, 2.3, 26, 2);
-    this.launchGlow.position.set(this.launchPad.position.x, 2.8, this.launchPad.position.z);
-    this.group.add(this.launchGlow);
-
-    this.landingGlow = new THREE.PointLight(0xffcf45, 2.2, 24, 2);
-    this.landingGlow.position.set(this.landingPad.position.x, 2.8, this.landingPad.position.z);
-    this.group.add(this.landingGlow);
-
-    this.roof = this._createRoof();
-    this.roof.visible = false;
-    this.roof.castShadow = true;
-    this.roof.receiveShadow = true;
-    this.group.add(this.roof);
-
-    this.launchPadHalf = 1.5;
-    this.landingPadHalf = 1.5;
-    this.spawn = new THREE.Vector3(-10, this.launchPadTopY() + 0.6, 0);
-
-    // Initialize with a flat profile; real values are applied per level.
-    this._applyTerrainProfile({
-      terrainAmp: 0,
-      terrainRidge: 0,
-      terrainDetail: 0,
-      terrainFreqX: 0.08,
-      terrainFreqZ: 0.08,
-      terrainDiagFreq: 0.05,
-      craterCount: 0,
-      craterDepth: 0,
-      craterRadiusMin: 1.2,
-      craterRadiusMax: 2.8,
-      craterRim: 0,
-      terrainSeed: 1,
-      corridorHalfWidth: 6,
-      corridorFlattenStrength: 1,
-      mountainCount: 0,
-      mountainHeight: 0,
-      mountainIntrusion: 0,
-      mountainRadiusMin: 1.5,
-      mountainRadiusMax: 3.0,
-      centerSpireCount: 0,
-      centerSpireHeight: 0,
-      centerSpireRadiusMin: 0.9,
-      centerSpireRadiusMax: 1.8,
-      chasmCount: 0,
-      chasmDepth: 0,
-      chasmWidthX: 1.0,
-      chasmWidthZ: 4.0,
-      tunnelGateCount: 0,
-      tunnelGapWidth: 3.2,
-      tunnelGapHeight: 3.6,
-      tunnelDepth: 1.1,
-      tunnelFrameThickness: 0.45,
-      terrainMinClamp: -2.8,
-      terrainMaxClamp: 4.8
-    });
+    this._setupSceneLighting();
+    this._buildAtmosphere();
+    this._buildStaticWorldScenery();
+    this._buildDynamicContainers();
+    this._buildPads();
   }
 
-  _createSkyDome() {
-    const canvas = document.createElement("canvas");
-    canvas.width = 32;
-    canvas.height = 512;
-    const ctx = canvas.getContext("2d");
-    const g = ctx.createLinearGradient(0, 0, 0, canvas.height);
-    g.addColorStop(0.0, "#010108");
-    g.addColorStop(0.35, "#050b1d");
-    g.addColorStop(0.65, "#1a0b2f");
-    g.addColorStop(1.0, "#030309");
-    ctx.fillStyle = g;
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
+  _setupSceneLighting() {
+    this.hemiLight = new THREE.HemisphereLight(0x7f9ebf, 0x090b0f, 0.8);
+    this.group.add(this.hemiLight);
 
-    const tex = new THREE.CanvasTexture(canvas);
-    tex.colorSpace = THREE.SRGBColorSpace;
+    this.sunLight = new THREE.DirectionalLight(0xe6f0ff, 1.1);
+    this.sunLight.position.set(14, 18, 12);
+    this.sunLight.castShadow = true;
+    this.sunLight.shadow.mapSize.set(1024, 1024);
+    this.sunLight.shadow.camera.near = 1;
+    this.sunLight.shadow.camera.far = 120;
+    this.sunLight.shadow.camera.left = -36;
+    this.sunLight.shadow.camera.right = 36;
+    this.sunLight.shadow.camera.top = 30;
+    this.sunLight.shadow.camera.bottom = -30;
+    this.sunLight.shadow.bias = -0.00015;
+    this.group.add(this.sunLight);
+  }
 
-    const mat = new THREE.MeshBasicMaterial({
-      map: tex,
+  _buildAtmosphere() {
+    const skyTex = this._makeGradientTexture([
+      [0.0, "#05080e"],
+      [0.45, "#0b111a"],
+      [1.0, "#161f2d"]
+    ], 32, 512);
+    skyTex.colorSpace = THREE.SRGBColorSpace;
+
+    const skyMat = new THREE.MeshBasicMaterial({
+      map: skyTex,
       side: THREE.BackSide,
       depthWrite: false,
       fog: false
     });
-    const mesh = new THREE.Mesh(new THREE.SphereGeometry(140, 40, 24), mat);
-    mesh.position.set(1, 18, 0);
-    return mesh;
+    this.skyDome = new THREE.Mesh(new THREE.SphereGeometry(220, 32, 18), skyMat);
+    this.skyDome.position.set(0, 25, 0);
+    this.group.add(this.skyDome);
+
+    this.starField = this._createStars();
+    this.group.add(this.starField);
+
+    const hazeMat = new THREE.MeshBasicMaterial({
+      color: 0x1a2738,
+      transparent: true,
+      opacity: 0.2,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+      side: THREE.DoubleSide,
+      fog: false
+    });
+    this.hazePlane = new THREE.Mesh(new THREE.PlaneGeometry(220, 40), hazeMat);
+    this.hazePlane.position.set(0, 12, -50);
+    this.group.add(this.hazePlane);
   }
 
-  _createStarField() {
-    const count = 1400;
-    const positions = new Float32Array(count * 3);
-    const colors = new Float32Array(count * 3);
-    const c = new THREE.Color();
+  _buildStaticWorldScenery() {
+    this.backdropGroup = new THREE.Group();
+    this.group.add(this.backdropGroup);
 
+    const farPlaneTex = this._makeGradientTexture([
+      [0.0, "#0a1017"],
+      [0.35, "#111a26"],
+      [1.0, "#05070b"]
+    ], 4, 256);
+    farPlaneTex.colorSpace = THREE.SRGBColorSpace;
+
+    this.farBackdrop = new THREE.Mesh(
+      new THREE.PlaneGeometry(420, 160),
+      new THREE.MeshBasicMaterial({ map: farPlaneTex, fog: false })
+    );
+    this.farBackdrop.position.set(0, 26, -70);
+    this.backdropGroup.add(this.farBackdrop);
+
+    this.ridgeNear = this._createRidgeLayer({ z: -36, yBase: 1.8, height: 5.4, color: 0x1d2b38, opacity: 0.95, seed: 17 });
+    this.ridgeFar = this._createRidgeLayer({ z: -50, yBase: 3.0, height: 7.0, color: 0x121b26, opacity: 0.82, seed: 33 });
+    this.backdropGroup.add(this.ridgeFar);
+    this.backdropGroup.add(this.ridgeNear);
+
+    const groundBase = new THREE.Mesh(
+      new THREE.PlaneGeometry(420, 180),
+      new THREE.MeshStandardMaterial({ color: 0x10161d, roughness: 0.98, metalness: 0.02 })
+    );
+    groundBase.rotation.x = -Math.PI / 2;
+    groundBase.position.set(0, -0.2, -10);
+    groundBase.receiveShadow = true;
+    this.backdropGroup.add(groundBase);
+  }
+
+  _buildDynamicContainers() {
+    this.corridorGroup = new THREE.Group();
+    this.group.add(this.corridorGroup);
+
+    this.obstacleGroup = new THREE.Group();
+    this.group.add(this.obstacleGroup);
+
+    this.fxGroup = new THREE.Group();
+    this.group.add(this.fxGroup);
+  }
+
+  _buildPads() {
+    this.launchPad = this._createLaunchPad();
+    this.group.add(this.launchPad);
+
+    this.landingPad = this._createLandingPad();
+    this.group.add(this.landingPad);
+
+    this.launchGlow = new THREE.PointLight(0x4ce7ff, 1.6, 18, 2);
+    this.group.add(this.launchGlow);
+    this.landingGlow = new THREE.PointLight(0xffbf58, 1.8, 20, 2);
+    this.group.add(this.landingGlow);
+  }
+
+  _makeGradientTexture(stops, width = 32, height = 256) {
+    const canvas = document.createElement("canvas");
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext("2d");
+    const g = ctx.createLinearGradient(0, 0, 0, height);
+    for (const [pos, color] of stops) g.addColorStop(pos, color);
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, width, height);
+    return new THREE.CanvasTexture(canvas);
+  }
+
+  _createStars() {
+    const count = 700;
+    const pos = new Float32Array(count * 3);
     for (let i = 0; i < count; i++) {
       const a = Math.random() * Math.PI * 2;
-      const r = 46 + Math.random() * 82;
-      const y = 8 + Math.pow(Math.random(), 0.45) * 78;
-      positions[i * 3 + 0] = Math.cos(a) * r;
-      positions[i * 3 + 1] = y;
-      positions[i * 3 + 2] = Math.sin(a) * r;
-
-      const t = Math.random();
-      c.setRGB(0.65 + t * 0.35, 0.75 + t * 0.25, 1.0);
-      colors[i * 3 + 0] = c.r;
-      colors[i * 3 + 1] = c.g;
-      colors[i * 3 + 2] = c.b;
+      const r = 60 + Math.random() * 120;
+      pos[i * 3 + 0] = Math.cos(a) * r;
+      pos[i * 3 + 1] = 12 + Math.random() * 75;
+      pos[i * 3 + 2] = Math.sin(a) * r;
     }
-
-    const geom = new THREE.BufferGeometry();
-    geom.setAttribute("position", new THREE.BufferAttribute(positions, 3));
-    geom.setAttribute("color", new THREE.BufferAttribute(colors, 3));
-
-    const mat = new THREE.PointsMaterial({
-      size: 0.48,
-      sizeAttenuation: true,
-      vertexColors: true,
-      transparent: true,
-      opacity: 0.9,
-      depthWrite: false,
-      blending: THREE.AdditiveBlending,
-      fog: false
-    });
-
-    return new THREE.Points(geom, mat);
+    const g = new THREE.BufferGeometry();
+    g.setAttribute("position", new THREE.BufferAttribute(pos, 3));
+    return new THREE.Points(
+      g,
+      new THREE.PointsMaterial({ color: 0x9dd9ff, size: 0.6, sizeAttenuation: true, depthWrite: false, transparent: true, opacity: 0.7, fog: false })
+    );
   }
 
-  _createHorizonGlow(inner, outer, color, opacity) {
-    const geom = new THREE.RingGeometry(inner, outer, 96);
-    const mat = new THREE.MeshBasicMaterial({
-      color,
-      transparent: true,
-      opacity,
-      side: THREE.DoubleSide,
-      blending: THREE.AdditiveBlending,
-      depthWrite: false,
-      fog: false
-    });
+  _createRidgeLayer({ z, yBase, height, color, opacity, seed }) {
+    const width = 420;
+    const xSeg = 160;
+    const geom = new THREE.PlaneGeometry(width, height, xSeg, 1);
+    const pos = geom.attributes.position;
+    for (let i = 0; i < pos.count; i++) {
+      const x = pos.getX(i);
+      const y = pos.getY(i);
+      const top = y > 0;
+      if (!top) continue;
+      const n = hash2(x * 0.07 + seed, seed * 0.13);
+      const n2 = hash2(x * 0.11 - seed, seed * 0.31);
+      const h = (Math.sin(x * 0.045 + seed) * 0.5 + 0.5) * 0.55 + n * 0.25 + n2 * 0.2;
+      pos.setY(i, y * (0.55 + h));
+    }
+    pos.needsUpdate = true;
+    geom.computeVertexNormals();
+    const mat = new THREE.MeshBasicMaterial({ color, transparent: true, opacity, side: THREE.DoubleSide, depthWrite: false, fog: false });
     const mesh = new THREE.Mesh(geom, mat);
-    mesh.rotation.x = -Math.PI / 2;
-    mesh.position.set(1, 0.2, 0);
-    return mesh;
-  }
-
-  _createTerrain() {
-    this.terrainGeom = new THREE.PlaneGeometry(this.worldHalfX * 2, this.worldHalfZ * 2, 240, 120);
-    this.terrainGeom.rotateX(-Math.PI / 2);
-
-    this.terrainBase = new THREE.Mesh(
-      this.terrainGeom,
-      new THREE.MeshStandardMaterial({
-        color: 0x4b4d52,
-        emissive: 0x07090b,
-        emissiveIntensity: 0.08,
-        metalness: 0.02,
-        roughness: 0.98
-      })
-    );
-    this.terrainBase.position.y = -0.012;
-    this.terrainBase.receiveShadow = true;
-
-    this.terrainWire = new THREE.Mesh(
-      this.terrainGeom,
-      new THREE.MeshStandardMaterial({
-        color: 0x6d7783,
-        emissive: 0x0a1017,
-        emissiveIntensity: 0.08,
-        metalness: 0.0,
-        roughness: 0.95,
-        wireframe: true,
-        transparent: true,
-        opacity: 0.15
-      })
-    );
-    this.terrainWire.receiveShadow = false;
-
-    const terrainGroup = new THREE.Group();
-    terrainGroup.add(this.terrainBase);
-    terrainGroup.add(this.terrainWire);
-    return terrainGroup;
-  }
-
-  _padAdd(parent, geometry, material, x, y, z, rx = 0, ry = 0, rz = 0) {
-    const mesh = new THREE.Mesh(geometry, material);
-    mesh.position.set(x, y, z);
-    mesh.rotation.set(rx, ry, rz);
-    mesh.castShadow = true;
-    mesh.receiveShadow = true;
-    parent.add(mesh);
+    mesh.position.set(0, yBase + height * 0.5, z);
     return mesh;
   }
 
   _createLaunchPad() {
     const group = new THREE.Group();
+    const deckMat = new THREE.MeshStandardMaterial({ color: 0x171f28, metalness: 0.35, roughness: 0.7 });
+    const trimMat = new THREE.MeshStandardMaterial({ color: 0x6df4ff, emissive: 0x0b3642, emissiveIntensity: 0.8, metalness: 0.35, roughness: 0.25 });
+    const darkMat = new THREE.MeshStandardMaterial({ color: 0x0d1118, metalness: 0.6, roughness: 0.55 });
 
-    const hull = new THREE.MeshStandardMaterial({
-      color: 0x2c3138,
-      emissive: 0x080a10,
-      emissiveIntensity: 0.08,
-      metalness: 0.36,
-      roughness: 0.72
-    });
-    const deck = new THREE.MeshStandardMaterial({
-      color: 0x474f58,
-      emissive: 0x080c13,
-      emissiveIntensity: 0.08,
-      metalness: 0.22,
-      roughness: 0.84
-    });
-    const trim = new THREE.MeshStandardMaterial({
-      color: 0x6af8ff,
-      emissive: 0x0b4252,
-      emissiveIntensity: 0.65,
-      metalness: 0.3,
-      roughness: 0.26
-    });
-    const caution = new THREE.MeshStandardMaterial({
-      color: 0xd7b05f,
-      emissive: 0x2e1f08,
-      emissiveIntensity: 0.2,
-      metalness: 0.22,
-      roughness: 0.42
-    });
+    const deck = new THREE.Mesh(new THREE.CylinderGeometry(1.6, 1.85, 1.0, 8), deckMat);
+    deck.castShadow = true;
+    deck.receiveShadow = true;
+    group.add(deck);
 
-    this._padAdd(group, new THREE.CylinderGeometry(1.52, 1.45, 0.86, 8), hull, 0, -0.07, 0);
-    this._padAdd(group, new THREE.CylinderGeometry(1.42, 1.42, 0.12, 8), deck, 0, 0.44, 0);
-    this._padAdd(group, new THREE.CylinderGeometry(1.15, 1.15, 0.04, 8), deck, 0, 0.49, 0);
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(1.55, 0.05, 8, 48), trimMat);
+    ring.rotation.x = Math.PI / 2;
+    ring.position.y = 0.54;
+    group.add(ring);
 
-    const trenchRing = this._padAdd(
-      group,
-      new THREE.TorusGeometry(1.05, 0.03, 10, 48),
-      trim,
-      0,
-      0.505,
-      0,
-      Math.PI / 2,
-      0,
-      0
-    );
-    trenchRing.receiveShadow = false;
-
-    const railGeom = new THREE.BoxGeometry(0.14, 0.06, 1.1);
     for (let i = 0; i < 4; i++) {
-      const a = (i / 4) * Math.PI * 2;
-      const x = Math.cos(a) * 0.72;
-      const z = Math.sin(a) * 0.72;
-      const rail = this._padAdd(group, railGeom, trim, x, 0.505, z, 0, a, 0);
-      rail.receiveShadow = false;
+      const a = (i / 4) * Math.PI * 2 + Math.PI / 4;
+      const pylon = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.65, 0.18), darkMat);
+      pylon.position.set(Math.cos(a) * 1.35, 0.15, Math.sin(a) * 1.35);
+      pylon.castShadow = true;
+      pylon.receiveShadow = true;
+      group.add(pylon);
+
+      const light = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.08, 0.12), trimMat);
+      light.position.copy(pylon.position).add(new THREE.Vector3(0, 0.32, 0));
+      group.add(light);
     }
 
-    const pylonGeom = new THREE.BoxGeometry(0.14, 0.44, 0.14);
-    const pylonCapGeom = new THREE.BoxGeometry(0.22, 0.06, 0.22);
-    for (let i = 0; i < 8; i++) {
-      const a = (i / 8) * Math.PI * 2 + Math.PI / 8;
-      const r = 1.2;
-      const x = Math.cos(a) * r;
-      const z = Math.sin(a) * r;
-      this._padAdd(group, pylonGeom, hull, x, 0.74, z);
-      this._padAdd(group, pylonCapGeom, caution, x, 0.99, z);
-    }
-
-    // Imperial-style docking braces / gantries
-    for (const side of [-1, 1]) {
-      const gx = side * 0.88;
-      this._padAdd(group, new THREE.BoxGeometry(0.12, 0.9, 0.12), hull, gx, 0.95, 0);
-      this._padAdd(group, new THREE.BoxGeometry(0.12, 0.72, 0.12), hull, gx * 0.86, 0.82, 0.52);
-      this._padAdd(group, new THREE.BoxGeometry(0.12, 0.72, 0.12), hull, gx * 0.86, 0.82, -0.52);
-      this._padAdd(group, new THREE.BoxGeometry(0.22, 0.08, 1.14), hull, gx * 0.93, 1.34, 0);
-
-      const lamp = this._padAdd(group, new THREE.BoxGeometry(0.06, 0.06, 0.9), trim, gx * 0.93, 1.29, 0);
-      lamp.receiveShadow = false;
-    }
-
+    group.userData.deckTop = 0.5;
     return group;
   }
 
   _createLandingPad() {
     const group = new THREE.Group();
+    const baseMat = new THREE.MeshStandardMaterial({ color: 0x2a2f35, metalness: 0.3, roughness: 0.75 });
+    const yellowMat = new THREE.MeshStandardMaterial({ color: 0xffd04f, emissive: 0x4f3002, emissiveIntensity: 0.3, metalness: 0.18, roughness: 0.45 });
+    const blackMat = new THREE.MeshStandardMaterial({ color: 0x0a0c10, metalness: 0.45, roughness: 0.5 });
 
-    const base = new THREE.MeshStandardMaterial({
-      color: 0x343b45,
-      emissive: 0x080a10,
-      emissiveIntensity: 0.08,
-      metalness: 0.28,
-      roughness: 0.78
-    });
-    const yellow = new THREE.MeshStandardMaterial({
-      color: 0xffd347,
-      emissive: 0x473208,
-      emissiveIntensity: 0.25,
-      metalness: 0.2,
-      roughness: 0.34
-    });
-    const black = new THREE.MeshStandardMaterial({
-      color: 0x0f1116,
-      emissive: 0x050608,
-      emissiveIntensity: 0.04,
-      metalness: 0.32,
-      roughness: 0.58
-    });
+    const deck = new THREE.Mesh(new THREE.BoxGeometry(3, 1, 3), baseMat);
+    deck.castShadow = true;
+    deck.receiveShadow = true;
+    group.add(deck);
 
-    this._padAdd(group, new THREE.CylinderGeometry(1.5, 1.42, 0.9, 32), base, 0, -0.05, 0);
-    this._padAdd(group, new THREE.CylinderGeometry(1.42, 1.42, 0.08, 32), yellow, 0, 0.46, 0);
-    this._padAdd(group, new THREE.CylinderGeometry(1.14, 1.14, 0.03, 32), base, 0, 0.495, 0);
+    const topPlate = new THREE.Mesh(new THREE.BoxGeometry(2.78, 0.08, 2.78), yellowMat);
+    topPlate.position.y = 0.54;
+    topPlate.receiveShadow = true;
+    group.add(topPlate);
 
-    const ring = this._padAdd(
-      group,
-      new THREE.TorusGeometry(1.31, 0.04, 12, 64),
-      yellow,
-      0,
-      0.505,
-      0,
-      Math.PI / 2
-    );
-    ring.receiveShadow = false;
-
-    // Black warning stripes around the edge (scaled with pad size because they are children of the pad group).
-    const stripeGeom = new THREE.BoxGeometry(0.12, 0.035, 0.36);
-    for (let i = 0; i < 20; i++) {
-      const a = (i / 20) * Math.PI * 2;
-      const x = Math.cos(a) * 1.3;
-      const z = Math.sin(a) * 1.3;
-      const stripe = this._padAdd(group, stripeGeom, black, x, 0.51, z, 0, a, 0);
-      stripe.receiveShadow = false;
+    for (let i = 0; i < 8; i++) {
+      const stripe = new THREE.Mesh(new THREE.BoxGeometry(0.36, 0.09, 0.12), i % 2 === 0 ? blackMat : yellowMat);
+      stripe.position.set(-1.05 + i * 0.3, 0.58, 1.28);
+      group.add(stripe);
+      const stripeBack = stripe.clone();
+      stripeBack.position.z = -1.28;
+      group.add(stripeBack);
+    }
+    for (let i = 0; i < 8; i++) {
+      const stripe = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.09, 0.36), i % 2 === 0 ? blackMat : yellowMat);
+      stripe.position.set(1.28, 0.58, -1.05 + i * 0.3);
+      group.add(stripe);
+      const stripeLeft = stripe.clone();
+      stripeLeft.position.x = -1.28;
+      group.add(stripeLeft);
     }
 
-    const centerMark = this._padAdd(group, new THREE.RingGeometry(0.58, 0.72, 32), black, 0, 0.514, 0, -Math.PI / 2);
-    centerMark.receiveShadow = false;
-    const hBarA = this._padAdd(group, new THREE.BoxGeometry(0.15, 0.02, 0.85), black, 0, 0.515, 0);
-    hBarA.receiveShadow = false;
-    const hBarB = this._padAdd(group, new THREE.BoxGeometry(0.75, 0.02, 0.14), black, 0, 0.515, 0);
-    hBarB.receiveShadow = false;
-
+    group.userData.deckTop = 0.5;
     return group;
   }
 
-  _createCanyonRim() {
-    const group = new THREE.Group();
-    const rockMat = new THREE.MeshStandardMaterial({
-      color: 0x50555d,
-      emissive: 0x090b0f,
-      emissiveIntensity: 0.06,
-      metalness: 0.02,
-      roughness: 0.98
+  _clearDynamic() {
+    const groups = [this.corridorGroup, this.obstacleGroup, this.fxGroup];
+    for (const group of groups) {
+      while (group.children.length) {
+        const child = group.children.pop();
+        this._disposeObject(child);
+      }
+    }
+    this._obstacleColliders = [];
+    this._obstacleMeshes = [];
+    this._levelObjects = [];
+    this._lightsPulse = [];
+  }
+
+  _disposeObject(obj) {
+    obj.traverse?.((node) => {
+      if (node.geometry) node.geometry.dispose?.();
+      if (Array.isArray(node.material)) {
+        for (const m of node.material) m?.dispose?.();
+      } else {
+        node.material?.dispose?.();
+      }
     });
-    const capMat = new THREE.MeshStandardMaterial({
-      color: 0x6a717b,
-      emissive: 0x0b0d12,
-      emissiveIntensity: 0.06,
-      metalness: 0.02,
-      roughness: 0.94
-    });
-    const glowMat = new THREE.MeshBasicMaterial({
-      color: 0x334455,
-      transparent: true,
-      opacity: 0.08,
-      depthWrite: false
-    });
-
-    this.canyonRockMat = rockMat;
-    this.canyonCapMat = capMat;
-    this.canyonRimGroup = group;
-
-    const addRock = (geom, mat, x, y, z, rx = 0, ry = 0, rz = 0, sx = 1, sy = 1, sz = 1) => {
-      const mesh = new THREE.Mesh(geom, mat);
-      mesh.position.set(x, y, z);
-      mesh.rotation.set(rx, ry, rz);
-      mesh.scale.set(sx, sy, sz);
-      mesh.castShadow = true;
-      mesh.receiveShadow = true;
-      group.add(mesh);
-      return mesh;
-    };
-
-    const rand = this._randFactory(74021);
-    const sideDepthBase = 5.2;
-    const sideZBase = this.worldHalfZ + 8;
-    const spanX = this.worldHalfX + 24;
-    const sideSegments = 34;
-    for (const sign of [-1, 1]) {
-      for (let i = 0; i < sideSegments; i++) {
-        const t = sideSegments === 1 ? 0.5 : i / (sideSegments - 1);
-        const x = -spanX + t * spanX * 2 + (rand() - 0.5) * 2.6;
-        const w = 3.2 + rand() * 3.6;
-        const h = 6.0 + rand() * 7.0 + (i % 3 === 0 ? 2.0 : 0);
-        const d = sideDepthBase + rand() * 3.6;
-        const z = sign * (sideZBase + rand() * 2.8);
-        const y = h * 0.5 - 0.3;
-        const rotY = (rand() - 0.5) * 0.14;
-        addRock(new THREE.BoxGeometry(w, h, d), rockMat, x, y, z, (rand() - 0.5) * 0.08, rotY, (rand() - 0.5) * 0.08);
-
-        if (rand() > 0.35) {
-          const mesa = addRock(
-            new THREE.DodecahedronGeometry(1, 0),
-            capMat,
-            x + (rand() - 0.5) * 1.6,
-            y + h * 0.45 + 1.2 + rand() * 1.4,
-            z + (rand() - 0.5) * 1.6,
-            rand() * Math.PI,
-            rand() * Math.PI,
-            rand() * Math.PI,
-            1.0 + rand() * 1.4,
-            0.8 + rand() * 1.6,
-            1.0 + rand() * 1.5
-          );
-          mesa.castShadow = true;
-        }
-      }
-    }
-
-    // End walls to complete the canyon enclosure.
-    const endSegments = 14;
-    const spanZ = this.worldHalfZ + 10;
-    for (const sign of [-1, 1]) {
-      for (let i = 0; i < endSegments; i++) {
-        const t = endSegments === 1 ? 0.5 : i / (endSegments - 1);
-        const z = -spanZ + t * spanZ * 2 + (rand() - 0.5) * 1.7;
-        const w = 4.8 + rand() * 3.2;
-        const h = 6.5 + rand() * 8.0;
-        const d = 3.0 + rand() * 3.4;
-        const x = sign * (this.worldHalfX + 16 + rand() * 5.0);
-        addRock(new THREE.BoxGeometry(d, h, w), rockMat, x, h * 0.5 - 0.5, z, (rand() - 0.5) * 0.06, (rand() - 0.5) * 0.1, (rand() - 0.5) * 0.06);
-      }
-    }
-
-    // Low atmospheric floor haze to blend the canyon walls into the scene.
-    const haze = new THREE.Mesh(new THREE.RingGeometry(36, 92, 128), glowMat);
-    haze.rotation.x = -Math.PI / 2;
-    haze.position.y = 0.08;
-    haze.receiveShadow = false;
-    group.add(haze);
-    this.canyonHaze = haze;
-
-    return group;
-  }
-
-  _createRoof() {
-    const g = new THREE.BoxGeometry(20, 1, 18);
-    const m = new THREE.MeshStandardMaterial({
-      color: 0x9900ff,
-      emissive: 0x220022,
-      emissiveIntensity: 0.2,
-      transparent: true,
-      opacity: 0.35
-    });
-    const roof = new THREE.Mesh(g, m);
-    roof.position.set(2, 7.0, 0);
-    return roof;
-  }
-
-  _randFactory(seed) {
-    let s = (seed | 0) || 1;
-    return () => {
-      s = (s * 1664525 + 1013904223) >>> 0;
-      return s / 4294967296;
-    };
-  }
-
-  _smoothstep(edge0, edge1, x) {
-    const t = Math.max(0, Math.min(1, (x - edge0) / (edge1 - edge0 || 1)));
-    return t * t * (3 - 2 * t);
-  }
-
-  _generateCraters(profile) {
-    this._craters = [];
-    if (!profile.craterCount || profile.craterCount <= 0) return;
-
-    const rand = this._randFactory(profile.terrainSeed || 1);
-    const craterHalfX = this.worldHalfX * 0.9;
-    const craterHalfZ = this.worldHalfZ * 0.82;
-    for (let i = 0; i < profile.craterCount; i++) {
-      const x = -craterHalfX + rand() * craterHalfX * 2;
-      const z = -craterHalfZ + rand() * craterHalfZ * 2;
-      const radius = profile.craterRadiusMin + rand() * (profile.craterRadiusMax - profile.craterRadiusMin);
-      const depth = profile.craterDepth * (0.55 + rand() * 0.85);
-      const rim = profile.craterRim * (0.7 + rand() * 0.8);
-      this._craters.push({ x, z, radius, depth, rim });
-    }
-  }
-
-  _generateHazards(profile) {
-    this._mountains = [];
-    this._chasms = [];
-    this._centerSpires = [];
-    this._tunnelGates = [];
-    this._tunnelCollisionBoxes = [];
-
-    const rand = this._randFactory((profile.terrainSeed || 1) * 97 + 13);
-    const routeMinX = this.launchPad.position.x + 3.5;
-    const routeMaxX = this.landingPad.position.x - 1.2;
-    const corridorHalf = Math.max(1.5, profile.corridorHalfWidth ?? 4.5);
-    const usableHalf = Math.max(0.9, corridorHalf - 0.5);
-
-    const mountainCount = Math.max(0, profile.mountainCount || 0);
-    for (let i = 0; i < mountainCount; i++) {
-      const t = (i + 1) / (mountainCount + 1);
-      const x = routeMinX + (routeMaxX - routeMinX) * t + (rand() - 0.5) * 1.8;
-      const side = ((i + (profile.terrainSeed || 1)) % 2 === 0) ? 1 : -1;
-      const intrude = Math.max(0, Math.min(1, profile.mountainIntrusion ?? 0.4));
-      const laneBase = corridorHalf * (0.75 - intrude * 0.55);
-      const z = side * (laneBase + (rand() - 0.5) * Math.max(0.6, corridorHalf * 0.45));
-      const rx = (profile.mountainRadiusMin || 1.5) + rand() * ((profile.mountainRadiusMax || 3.0) - (profile.mountainRadiusMin || 1.5));
-      const rz = rx * (0.75 + rand() * 0.75);
-      const h = (profile.mountainHeight || 0) * (0.8 + rand() * 0.55);
-      this._mountains.push({ x, z, rx, rz, h });
-    }
-
-    const chasmCount = Math.max(0, profile.chasmCount || 0);
-    for (let i = 0; i < chasmCount; i++) {
-      const t = (i + 1) / (chasmCount + 1);
-      const x = routeMinX + (routeMaxX - routeMinX) * t + (rand() - 0.5) * 2.2;
-      const side = ((i + (profile.terrainSeed || 1)) % 2 === 0) ? -1 : 1;
-      const z = side * corridorHalf * (0.15 + rand() * 0.45);
-      const rx = (profile.chasmWidthX || 1.0) * (0.8 + rand() * 0.6);
-      const rz = (profile.chasmWidthZ || 4.0) * (0.85 + rand() * 0.55);
-      const depth = (profile.chasmDepth || 0) * (0.8 + rand() * 0.45);
-      const rim = depth * 0.12;
-      this._chasms.push({ x, z, rx, rz, depth, rim });
-    }
-
-    const centerSpireCount = Math.max(0, profile.centerSpireCount || 0);
-    for (let i = 0; i < centerSpireCount; i++) {
-      const t = (i + 1) / (centerSpireCount + 1);
-      const x = routeMinX + (routeMaxX - routeMinX) * t + (rand() - 0.5) * 1.8;
-      const z = (rand() - 0.5) * Math.min(usableHalf * 1.2, 2.6);
-      const rx = (profile.centerSpireRadiusMin || 1.0) + rand() * ((profile.centerSpireRadiusMax || 2.0) - (profile.centerSpireRadiusMin || 1.0));
-      const rz = rx * (0.8 + rand() * 0.6);
-      const h = (profile.centerSpireHeight || 0) * (0.82 + rand() * 0.45);
-      this._centerSpires.push({ x, z, rx, rz, h });
-    }
-
-    const tunnelGateCount = Math.max(0, profile.tunnelGateCount || 0);
-    for (let i = 0; i < tunnelGateCount; i++) {
-      const t = (i + 1) / (tunnelGateCount + 1);
-      const x = routeMinX + (routeMaxX - routeMinX) * t + (rand() - 0.5) * 1.4;
-      const z = (rand() - 0.5) * Math.min(usableHalf * 0.9, 1.9);
-      const openW = (profile.tunnelGapWidth || 3.0) * (0.92 + rand() * 0.16);
-      const openH = (profile.tunnelGapHeight || 3.4) * (0.94 + rand() * 0.12);
-      const depth = (profile.tunnelDepth || 1.1) * (0.9 + rand() * 0.2);
-      const frameThickness = (profile.tunnelFrameThickness || 0.45) * (0.92 + rand() * 0.18);
-      this._tunnelGates.push({ x, z, openW, openH, depth, frameThickness });
-    }
-  }
-
-  _routeFeatureDeltaAt(x, z) {
-    let y = 0;
-
-    for (const s of this._centerSpires) {
-      const dx = (x - s.x) / s.rx;
-      const dz = (z - s.z) / s.rz;
-      const q = dx * dx + dz * dz;
-      if (q < 8) {
-        y += Math.exp(-q) * s.h;
-
-        // Sharpen the silhouette slightly so the center feels more like rock spires than smooth hills.
-        if (q < 2.4) {
-          y += Math.exp(-q * 1.8) * s.h * 0.35;
-        }
-      }
-    }
-
-    return y;
-  }
-
-  _terrainHeightRaw(x, z) {
-    const p = this._terrainProfile;
-    if (!p) return 0;
-    if (
-      p.terrainAmp <= 0 &&
-      p.craterCount <= 0 &&
-      (p.mountainCount || 0) <= 0 &&
-      (p.chasmCount || 0) <= 0
-    ) return 0;
-
-    let y = 0;
-    const seed = p.terrainSeed || 1;
-
-    y += Math.sin(x * p.terrainFreqX + seed * 0.71) * p.terrainAmp * 0.42;
-    y += Math.cos(z * p.terrainFreqZ - seed * 0.43) * p.terrainAmp * 0.35;
-    y += Math.sin((x + z) * p.terrainDiagFreq + seed * 0.33) * p.terrainRidge * 0.4;
-    y += Math.cos((x - z) * (p.terrainDiagFreq * 0.78) - seed * 0.21) * p.terrainRidge * 0.28;
-    y += Math.sin(x * 0.31 + seed) * Math.cos(z * 0.27 - seed * 0.6) * p.terrainDetail;
-
-    for (const c of this._craters) {
-      const dx = x - c.x;
-      const dz = z - c.z;
-      const d = Math.sqrt(dx * dx + dz * dz) / c.radius;
-
-      if (d < 1.35) {
-        if (d < 1) {
-          const bowl = 1 - d * d;
-          y -= bowl * c.depth;
-        }
-        const rimFalloff = (d - 1.02) / 0.22;
-        y += Math.exp(-(rimFalloff * rimFalloff)) * c.rim;
-      }
-    }
-
-    for (const m of this._mountains) {
-      const dx = (x - m.x) / m.rx;
-      const dz = (z - m.z) / m.rz;
-      const q = dx * dx + dz * dz;
-      if (q < 7) {
-        y += Math.exp(-q) * m.h;
-      }
-    }
-
-    for (const c of this._chasms) {
-      const dx = (x - c.x) / c.rx;
-      const dz = (z - c.z) / c.rz;
-      const q = dx * dx + dz * dz;
-      if (q < 8) {
-        y -= Math.exp(-q) * c.depth;
-        const rimDist = Math.sqrt(q);
-        const rimBand = (rimDist - 1.08) / 0.28;
-        y += Math.exp(-(rimBand * rimBand)) * c.rim;
-      }
-    }
-
-    return y;
-  }
-
-  _flattenAround(y, x, z, cx, cz, flatRadius, blendRadius) {
-    const dx = x - cx;
-    const dz = z - cz;
-    const d = Math.sqrt(dx * dx + dz * dz);
-    if (d <= flatRadius) return 0;
-    if (d >= blendRadius) return y;
-    const t = this._smoothstep(flatRadius, blendRadius, d);
-    return y * t;
-  }
-
-  _terrainHeightAt(x, z) {
-    let y = this._terrainHeightRaw(x, z);
-    const p = this._terrainProfile || {};
-
-    const launchBlend = this.launchPadHalf + 1.7;
-    const landingBlend = this.landingPadHalf + 2.0;
-    y = this._flattenAround(y, x, z, this.launchPad.position.x, this.launchPad.position.z, this.launchPadHalf + 0.55, launchBlend);
-    y = this._flattenAround(y, x, z, this.landingPad.position.x, this.landingPad.position.z, this.landingPadHalf + 0.65, landingBlend);
-
-    const corridorHalf = p.corridorHalfWidth ?? 4.5;
-    if (corridorHalf > 0 && x > this.launchPad.position.x - 1.5 && x < this.landingPad.position.x + 2.5) {
-      const az = Math.abs(z);
-      if (az < corridorHalf + 1.2) {
-        const t = this._smoothstep(corridorHalf, corridorHalf + 1.2, az);
-        const flattenStrength = Math.max(0, Math.min(1, p.corridorFlattenStrength ?? 1));
-        const flattened = y * t;
-        y += (flattened - y) * flattenStrength;
-      }
-    }
-
-    y += this._routeFeatureDeltaAt(x, z);
-
-    const minClamp = p.terrainMinClamp ?? -2.8;
-    const maxClamp = p.terrainMaxClamp ?? 4.8;
-    return Math.max(minClamp, Math.min(maxClamp, y));
-  }
-
-  _applyTerrainProfile(level) {
-    this._terrainProfile = {
-      terrainAmp: level.terrainAmp ?? 0,
-      terrainRidge: level.terrainRidge ?? 0,
-      terrainDetail: level.terrainDetail ?? 0,
-      terrainFreqX: level.terrainFreqX ?? 0.1,
-      terrainFreqZ: level.terrainFreqZ ?? 0.09,
-      terrainDiagFreq: level.terrainDiagFreq ?? 0.07,
-      craterCount: level.craterCount ?? 0,
-      craterDepth: level.craterDepth ?? 0,
-      craterRadiusMin: level.craterRadiusMin ?? 1.2,
-      craterRadiusMax: level.craterRadiusMax ?? 3.0,
-      craterRim: level.craterRim ?? 0,
-      terrainSeed: level.terrainSeed ?? 1,
-      corridorHalfWidth: level.corridorHalfWidth ?? 4.5,
-      corridorFlattenStrength: level.corridorFlattenStrength ?? 1,
-      mountainCount: level.mountainCount ?? 0,
-      mountainHeight: level.mountainHeight ?? 0,
-      mountainIntrusion: level.mountainIntrusion ?? 0.4,
-      mountainRadiusMin: level.mountainRadiusMin ?? 1.4,
-      mountainRadiusMax: level.mountainRadiusMax ?? 3.1,
-      centerSpireCount: level.centerSpireCount ?? 0,
-      centerSpireHeight: level.centerSpireHeight ?? 0,
-      centerSpireRadiusMin: level.centerSpireRadiusMin ?? 0.9,
-      centerSpireRadiusMax: level.centerSpireRadiusMax ?? 1.8,
-      chasmCount: level.chasmCount ?? 0,
-      chasmDepth: level.chasmDepth ?? 0,
-      chasmWidthX: level.chasmWidthX ?? 1.1,
-      chasmWidthZ: level.chasmWidthZ ?? 4.4,
-      tunnelGateCount: level.tunnelGateCount ?? 0,
-      tunnelGapWidth: level.tunnelGapWidth ?? 3.2,
-      tunnelGapHeight: level.tunnelGapHeight ?? 3.5,
-      tunnelDepth: level.tunnelDepth ?? 1.1,
-      tunnelFrameThickness: level.tunnelFrameThickness ?? 0.45,
-      terrainMinClamp: level.terrainMinClamp ?? -2.8,
-      terrainMaxClamp: level.terrainMaxClamp ?? 4.8
-    };
-
-    this._generateCraters(this._terrainProfile);
-    this._generateHazards(this._terrainProfile);
-
-    const pos = this.terrainGeom.attributes.position;
-    let terrainPeakY = -Infinity;
-    let routePeakY = -Infinity;
-    for (let i = 0; i < pos.count; i++) {
-      const x = pos.getX(i);
-      const z = pos.getZ(i);
-      const y = this._terrainHeightAt(x, z);
-      pos.setY(i, y);
-      if (y > terrainPeakY) terrainPeakY = y;
-      if (
-        x >= this.launchPad.position.x - 2 &&
-        x <= this.landingPad.position.x + 4 &&
-        Math.abs(z) <= 11
-      ) {
-        routePeakY = Math.max(routePeakY, y);
-      }
-    }
-    pos.needsUpdate = true;
-    this.terrainGeom.computeVertexNormals();
-    this._terrainPeakY = Number.isFinite(terrainPeakY) ? terrainPeakY : 0;
-    this._routePeakY = Number.isFinite(routePeakY) ? routePeakY : this._terrainPeakY;
-
-    const amp = this._terrainProfile.terrainAmp;
-    const moonShade = Math.max(0, Math.min(1, amp / 2.8));
-    this.terrainBase.material.color.setRGB(
-      0.28 + moonShade * 0.08,
-      0.29 + moonShade * 0.08,
-      0.31 + moonShade * 0.09
-    );
-    this.terrainWire.material.opacity = 0.06 + moonShade * 0.1;
-    if (this.canyonRockMat) {
-      this.canyonRockMat.color.setRGB(
-        0.22 + moonShade * 0.1,
-        0.23 + moonShade * 0.1,
-        0.26 + moonShade * 0.12
-      );
-    }
-    if (this.canyonCapMat) {
-      this.canyonCapMat.color.setRGB(
-        0.34 + moonShade * 0.12,
-        0.36 + moonShade * 0.12,
-        0.40 + moonShade * 0.14
-      );
-    }
-    if (this.canyonHaze) {
-      this._canyonHazeBaseOpacity = 0.05 + moonShade * 0.06;
-      this.canyonHaze.material.opacity = this._canyonHazeBaseOpacity;
-    }
-
-    this._rebuildRouteFeatures();
-  }
-
-  _disposeNode(node) {
-    if (!node) return;
-    if (node.geometry) node.geometry.dispose?.();
-    if (Array.isArray(node.material)) {
-      for (const m of node.material) m?.dispose?.();
-    } else {
-      node.material?.dispose?.();
-    }
-  }
-
-  _clearRouteFeatures() {
-    if (!this.routeFeatures) return;
-    this.routeFeatures.traverse((node) => {
-      if (node.isMesh) this._disposeNode(node);
-    });
-    this.routeFeatures.clear();
-    this._tunnelCollisionBoxes = [];
-    this._tunnelOpeningTopY = 0;
-  }
-
-  _pushTunnelCollisionBox(cx, cy, cz, sx, sy, sz) {
-    this._tunnelCollisionBoxes.push({
-      minX: cx - sx * 0.5,
-      maxX: cx + sx * 0.5,
-      minY: cy - sy * 0.5,
-      maxY: cy + sy * 0.5,
-      minZ: cz - sz * 0.5,
-      maxZ: cz + sz * 0.5
-    });
-  }
-
-  _rebuildRouteFeatures() {
-    this._clearRouteFeatures();
-    if (!this._tunnelGates.length) return;
-
-    const rockMat = new THREE.MeshStandardMaterial({
-      color: 0x62666f,
-      emissive: 0x090b10,
-      emissiveIntensity: 0.08,
-      metalness: 0.02,
-      roughness: 0.96
-    });
-    const trimMat = new THREE.MeshStandardMaterial({
-      color: 0x89f6ff,
-      emissive: 0x083e48,
-      emissiveIntensity: 0.4,
-      metalness: 0.22,
-      roughness: 0.35
-    });
-    const glowMat = new THREE.MeshBasicMaterial({
-      color: 0x79f2ff,
-      transparent: true,
-      opacity: 0.22,
-      depthWrite: false,
-      blending: THREE.AdditiveBlending
-    });
-
-    for (const gate of this._tunnelGates) {
-      const gateGroup = new THREE.Group();
-
-      const baseY = this.groundHeightAt(gate.x, gate.z) - 0.02;
-      const frameT = Math.max(0.3, gate.frameThickness);
-      const depth = Math.max(1.3, gate.depth); // used as tunnel thickness baseline
-      const openW = Math.max(3.8, gate.openW); // lateral opening width (z axis)
-      const openH = Math.max(4.3, gate.openH);
-      const tunnelLen = Math.max(6.5, depth * 6.8 + openW * 0.9 + frameT * 3.0); // route direction (x axis)
-      const ribCount = Math.max(5, Math.min(14, Math.round(tunnelLen / 1.05)));
-      const beamH = Math.max(0.34, frameT * 1.15);
-      const openingFloorY = baseY + 0.2;
-      const beamBottomY = openingFloorY + openH;
-      this._tunnelOpeningTopY = Math.max(this._tunnelOpeningTopY, beamBottomY);
-      const topBeamCenterY = beamBottomY + beamH * 0.5;
-      const postHeight = Math.max(1.1, beamBottomY - baseY);
-      const postCenterY = baseY + postHeight * 0.5;
-      const postOffsetZ = openW * 0.5 + frameT * 0.5;
-      const capWidthZ = openW + frameT * 2;
-      const tunnelOuterZ = openW + frameT * 3.4;
-      const xMin = gate.x - tunnelLen * 0.5;
-      const xMax = gate.x + tunnelLen * 0.5;
-
-      // Main tunnel shell that runs along the route direction (X).
-      const leftPost = new THREE.Mesh(new THREE.BoxGeometry(tunnelLen, postHeight, frameT), rockMat);
-      leftPost.position.set(gate.x, postCenterY, gate.z - postOffsetZ);
-      leftPost.castShadow = true;
-      leftPost.receiveShadow = true;
-      gateGroup.add(leftPost);
-      this._pushTunnelCollisionBox(leftPost.position.x, leftPost.position.y, leftPost.position.z, tunnelLen, postHeight, frameT);
-
-      const rightPost = new THREE.Mesh(new THREE.BoxGeometry(tunnelLen, postHeight, frameT), rockMat);
-      rightPost.position.set(gate.x, postCenterY, gate.z + postOffsetZ);
-      rightPost.castShadow = true;
-      rightPost.receiveShadow = true;
-      gateGroup.add(rightPost);
-      this._pushTunnelCollisionBox(rightPost.position.x, rightPost.position.y, rightPost.position.z, tunnelLen, postHeight, frameT);
-
-      const topBeam = new THREE.Mesh(new THREE.BoxGeometry(tunnelLen, beamH, capWidthZ), rockMat);
-      topBeam.position.set(gate.x, topBeamCenterY, gate.z);
-      topBeam.castShadow = true;
-      topBeam.receiveShadow = true;
-      gateGroup.add(topBeam);
-      this._pushTunnelCollisionBox(topBeam.position.x, topBeam.position.y, topBeam.position.z, tunnelLen, beamH, capWidthZ);
-
-      const shellRoofH = Math.max(0.34, frameT * 1.2);
-      const shellRoofY = topBeamCenterY + beamH * 0.5 + shellRoofH * 0.45;
-      const shellRoof = new THREE.Mesh(new THREE.BoxGeometry(tunnelLen, shellRoofH, tunnelOuterZ), rockMat);
-      shellRoof.position.set(gate.x, shellRoofY, gate.z);
-      shellRoof.castShadow = true;
-      shellRoof.receiveShadow = true;
-      gateGroup.add(shellRoof);
-      this._pushTunnelCollisionBox(shellRoof.position.x, shellRoof.position.y, shellRoof.position.z, tunnelLen, shellRoofH, tunnelOuterZ);
-
-      const shellSideH = Math.max(1.1, openH * 0.82);
-      const shellSideY = openingFloorY + shellSideH * 0.5 + 0.05;
-      const shellSideZ = openW * 0.5 + frameT * 1.35;
-      for (const sign of [-1, 1]) {
-        const sideShell = new THREE.Mesh(new THREE.BoxGeometry(tunnelLen, shellSideH, frameT * 1.25), rockMat);
-        sideShell.position.set(gate.x, shellSideY, gate.z + shellSideZ * sign);
-        sideShell.castShadow = true;
-        sideShell.receiveShadow = true;
-        gateGroup.add(sideShell);
-        this._pushTunnelCollisionBox(sideShell.position.x, sideShell.position.y, sideShell.position.z, tunnelLen, shellSideH, frameT * 1.25);
-      }
-
-      // Thin illuminated trim around the opening makes the tunnel readable on fast approaches.
-      const trimT = Math.max(0.04, frameT * 0.16);
-      const trimFrameZ = Math.max(0.04, frameT * 0.55);
-      const trimInsetX = tunnelLen * 0.5 - trimT * 0.5;
-      for (const end of [-1, 1]) {
-        const endX = gate.x + trimInsetX * end;
-
-        const leftTrim = new THREE.Mesh(new THREE.BoxGeometry(trimT, openH, trimFrameZ), trimMat);
-        leftTrim.position.set(endX, openingFloorY + openH * 0.5, gate.z - openW * 0.5);
-        leftTrim.castShadow = false;
-        gateGroup.add(leftTrim);
-
-        const rightTrim = new THREE.Mesh(new THREE.BoxGeometry(trimT, openH, trimFrameZ), trimMat);
-        rightTrim.position.set(endX, openingFloorY + openH * 0.5, gate.z + openW * 0.5);
-        rightTrim.castShadow = false;
-        gateGroup.add(rightTrim);
-
-        const topTrim = new THREE.Mesh(new THREE.BoxGeometry(trimT, trimT, openW), trimMat);
-        topTrim.position.set(endX, openingFloorY + openH, gate.z);
-        topTrim.castShadow = false;
-        gateGroup.add(topTrim);
-
-        const glowPanel = new THREE.Mesh(new THREE.PlaneGeometry(openW * 0.96, openH * 0.96), glowMat);
-        glowPanel.position.set(gate.x + (tunnelLen * 0.5 + 0.02) * end, openingFloorY + openH * 0.5, gate.z);
-        glowPanel.rotation.y = end > 0 ? -Math.PI / 2 : Math.PI / 2;
-        glowPanel.castShadow = false;
-        glowPanel.receiveShadow = false;
-        gateGroup.add(glowPanel);
-      }
-
-      // Rib segments to make each obstacle read as a tunnel corridor.
-      for (let i = 0; i < ribCount; i++) {
-        const t = ribCount === 1 ? 0.5 : i / (ribCount - 1);
-        const ribX = xMin + t * (xMax - xMin);
-        const ribT = Math.max(0.06, frameT * 0.34);
-        const ribMat = (i % 2 === 0) ? trimMat : rockMat;
-
-        const ribLeft = new THREE.Mesh(new THREE.BoxGeometry(ribT, postHeight, frameT * 0.9), ribMat);
-        ribLeft.position.set(ribX, postCenterY, gate.z - postOffsetZ);
-        ribLeft.castShadow = false;
-        gateGroup.add(ribLeft);
-
-        const ribRight = new THREE.Mesh(new THREE.BoxGeometry(ribT, postHeight, frameT * 0.9), ribMat);
-        ribRight.position.set(ribX, postCenterY, gate.z + postOffsetZ);
-        ribRight.castShadow = false;
-        gateGroup.add(ribRight);
-
-        const ribTop = new THREE.Mesh(new THREE.BoxGeometry(ribT, beamH, capWidthZ * 0.98), ribMat);
-        ribTop.position.set(ribX, topBeamCenterY, gate.z);
-        ribTop.castShadow = false;
-        gateGroup.add(ribTop);
-      }
-
-      // Exterior rock masses to make these read more like cave/tunnel cuts than sci-fi gates.
-      const lumpCount = 4;
-      for (let i = 0; i < lumpCount; i++) {
-        const endSign = i < 2 ? -1 : 1;
-        const sideSign = (i % 2 === 0) ? -1 : 1;
-        const lump = new THREE.Mesh(new THREE.DodecahedronGeometry(1, 0), rockMat);
-        lump.position.set(
-          gate.x + endSign * (tunnelLen * 0.35 + Math.random() * 0.8),
-          openingFloorY + openH * (0.65 + Math.random() * 0.35),
-          gate.z + sideSign * (openW * 0.7 + Math.random() * 0.6)
-        );
-        lump.rotation.set(Math.random() * Math.PI, Math.random() * Math.PI, Math.random() * Math.PI);
-        lump.scale.set(1.4 + Math.random() * 1.3, 1.1 + Math.random() * 1.6, 1.2 + Math.random() * 1.3);
-        lump.castShadow = true;
-        lump.receiveShadow = true;
-        gateGroup.add(lump);
-      }
-
-      this.routeFeatures.add(gateGroup);
-    }
-  }
-
-  _sphereHitsBox(pos, radius, box) {
-    const dx = Math.max(box.minX - pos.x, 0, pos.x - box.maxX);
-    const dy = Math.max(box.minY - pos.y, 0, pos.y - box.maxY);
-    const dz = Math.max(box.minZ - pos.z, 0, pos.z - box.maxZ);
-    return (dx * dx + dy * dy + dz * dz) <= radius * radius;
   }
 
   applyLevel(level) {
-    const routeLength = Math.max(16, level.routeLength ?? 22);
-    const routeMidX = 1.0;
-    const launchX = routeMidX - routeLength * 0.5;
-    const landingX = routeMidX + routeLength * 0.5;
-    const launchZ = 0;
-    const landingZ = 0;
+    this.level = level;
+    this._time = 0;
+    this._clearDynamic();
 
-    const launchSize = level.launchPadSize ?? level.padSize ?? 3.0;
-    const landingSize = level.landingPadSize ?? level.padSize ?? 3.0;
+    this.routeStartX = level.spawn?.x ?? (-level.routeLength * 0.5);
+    this.routeEndX = level.finishPad?.x ?? (level.routeLength * 0.5);
+    this.visualStartX = this.routeStartX - 12;
+    this.visualEndX = this.routeEndX + 12;
 
-    this.launchPad.position.set(launchX, 0.5, launchZ);
-    this.landingPad.position.set(landingX, 0.5, landingZ);
-    this.launchGlow.position.set(launchX, 2.8, launchZ);
-    this.landingGlow.position.set(landingX, 2.8, landingZ);
+    this.launchPadHalf = Math.max(1.2, (level.launchPad?.size ?? 3.4) * 0.5);
+    this.landingPadHalf = Math.max(1.4, (level.finishPad?.size ?? 6.0) * 0.5);
 
-    this.launchPad.scale.set(launchSize / 3, 1, launchSize / 3);
-    this.landingPad.scale.set(landingSize / 3, 1, landingSize / 3);
-    this.launchPadHalf = launchSize / 2;
-    this.landingPadHalf = landingSize / 2;
+    this.launchPad.position.set(level.launchPad?.x ?? this.routeStartX, level.launchPad?.y ?? 0.5, level.launchPad?.z ?? 0);
+    this.landingPad.position.set(level.finishPad?.x ?? this.routeEndX, level.finishPad?.y ?? 0.5, level.finishPad?.z ?? 0);
+
+    this.launchPad.scale.set((level.launchPad?.size ?? 3.4) / 3.4, 1, (level.launchPad?.size ?? 3.4) / 3.4);
+    this.landingPad.scale.set((level.finishPad?.size ?? 6.0) / 3.0, 1, (level.finishPad?.size ?? 6.0) / 3.0);
+
+    this.launchGlow.position.set(this.launchPad.position.x, this.launchPadTopY() + 1.6, this.launchPad.position.z);
+    this.landingGlow.position.set(this.landingPad.position.x, this.landingPadTopY() + 1.8, this.landingPad.position.z);
+    this.launchGlow.intensity = 1.6;
+    this.landingGlow.intensity = 1.8;
+    this._lightsPulse.push({ light: this.launchGlow, base: 1.6, speed: 2.8, amp: 0.16 });
+    this._lightsPulse.push({ light: this.landingGlow, base: 1.8, speed: 3.4, amp: 0.2 });
+
     this.spawn.set(this.launchPad.position.x, this.launchPadTopY() + 0.6, this.launchPad.position.z);
 
-    this.roof.visible = false;
+    const finishSeg = (level.segments || []).find((s) => s.type === "finishApproach");
+    this.finishApproachX = finishSeg?.x0 ?? (this.routeEndX - Math.min(12, level.routeLength * 0.22));
 
-    this._applyTerrainProfile(level);
+    this._buildProfileSamples();
+    this._buildCorridorGeometry();
+    this._buildInteriorObstacles();
+    this._buildLevelScenery();
 
-    const ceilingMargin = level.ceilingMargin ?? 3;
-    const minCeilingY = this.launchPadTopY() + 4.8;
-    this._flightCeilingY = Math.max(
-      minCeilingY,
-      this._routePeakY + ceilingMargin,
-      this._tunnelOpeningTopY + 1.0
-    );
+    const span = Math.max(60, level.routeLength + 36);
+    this.farBackdrop.scale.x = span / 420;
+    this.farBackdrop.position.x = (this.routeStartX + this.routeEndX) * 0.5;
+    this.ridgeNear.position.x = this.farBackdrop.position.x;
+    this.ridgeFar.position.x = this.farBackdrop.position.x;
+  }
+
+  _buildProfileSamples() {
+    this._profileSamples = [];
+    const count = this._sampleCount;
+    for (let i = 0; i <= count; i++) {
+      const t = i / count;
+      const x = lerp(this.visualStartX, this.visualEndX, t);
+      this._profileSamples.push(this._profileAt(x));
+    }
+  }
+
+  _profileAt(x) {
+    const c = this.level?.corridor || { baseHalfHeight: 4.6, baseHalfWidth: 4.6 };
+    let floorY = 0;
+    let ceilingY = (c.baseHalfHeight || 4.6) * 2;
+    let halfWidth = c.baseHalfWidth || 4.6;
+
+    const segments = this.level?.segments || [];
+    for (const seg of segments) {
+      if (typeof seg.x0 !== "number" || typeof seg.x1 !== "number") continue;
+      if (x < seg.x0 || x > seg.x1) continue;
+      const len = Math.max(0.001, seg.x1 - seg.x0);
+      const t = (x - seg.x0) / len;
+      const s = smooth01(t);
+      const b = bell01(t);
+
+      switch (seg.type) {
+        case "curve": {
+          const from = Number(seg.from || 0);
+          const to = Number(seg.to || 0);
+          const off = lerp(from, to, s);
+          floorY += off;
+          ceilingY += off;
+          break;
+        }
+        case "arch": {
+          ceilingY -= Math.max(0, Number(seg.drop || 0)) * b;
+          break;
+        }
+        case "dip": {
+          floorY -= Math.max(0, Number(seg.depth || 0)) * b;
+          break;
+        }
+        case "mound": {
+          floorY += Math.max(0, Number(seg.height || 0)) * b;
+          break;
+        }
+        case "walls": {
+          const targetW = Math.max(1.7, Number(seg.halfWidth || halfWidth));
+          halfWidth = Math.min(halfWidth, lerp(c.baseHalfWidth || halfWidth, targetW, b));
+          break;
+        }
+        default:
+          break;
+      }
+    }
+
+    // Smoothly flatten and widen around pads for reliable takeoff/landing.
+    const flattenAroundPad = (padX, padHalf) => {
+      const influence = padHalf + 2.2;
+      const d = Math.abs(x - padX);
+      if (d > influence) return;
+      const t = 1 - d / influence;
+      const s = smooth01(t);
+      floorY = lerp(floorY, 0, s);
+      halfWidth = Math.max(halfWidth, lerp(halfWidth, Math.max(padHalf + 1.2, c.baseHalfWidth || halfWidth), s));
+      ceilingY = Math.max(ceilingY, floorY + Math.max(4.2, (c.baseHalfHeight || 4.6) * 1.7));
+    };
+
+    flattenAroundPad(this.launchPad.position.x, this.launchPadHalf);
+    flattenAroundPad(this.landingPad.position.x, this.landingPadHalf);
+
+    const minClear = 2.95;
+    if (ceilingY < floorY + minClear) ceilingY = floorY + minClear;
+
+    return { x, floorY, ceilingY, halfWidth };
+  }
+
+  _sampleProfile(x) {
+    if (!this._profileSamples.length) return { x, floorY: 0, ceilingY: 8, halfWidth: 4.5 };
+
+    if (x <= this._profileSamples[0].x) return this._profileSamples[0];
+    const last = this._profileSamples[this._profileSamples.length - 1];
+    if (x >= last.x) return last;
+
+    const t = (x - this.visualStartX) / Math.max(0.001, this.visualEndX - this.visualStartX);
+    const idxf = clamp(t, 0, 1) * (this._profileSamples.length - 1);
+    const i0 = Math.floor(idxf);
+    const i1 = Math.min(this._profileSamples.length - 1, i0 + 1);
+    const f = idxf - i0;
+    const a = this._profileSamples[i0];
+    const b = this._profileSamples[i1];
+
+    return {
+      x,
+      floorY: lerp(a.floorY, b.floorY, f),
+      ceilingY: lerp(a.ceilingY, b.ceilingY, f),
+      halfWidth: lerp(a.halfWidth, b.halfWidth, f)
+    };
+  }
+
+  openSpaceFactorAt(x) {
+    const p = this._sampleProfile(x);
+    const h = p.ceilingY - p.floorY;
+    const w = p.halfWidth * 2;
+    return clamp(((h - 3.2) / 3.8) * 0.55 + ((w - 5.5) / 4.5) * 0.45, 0, 1);
+  }
+
+  _buildCorridorGeometry() {
+    const floorMat = new THREE.MeshStandardMaterial({ color: 0x242e38, roughness: 0.96, metalness: 0.05, emissive: 0x05090d, emissiveIntensity: 0.2 });
+    const roofMat = new THREE.MeshStandardMaterial({ color: 0x1e2730, roughness: 0.97, metalness: 0.04, emissive: 0x04070b, emissiveIntensity: 0.16 });
+    const wallMat = new THREE.MeshStandardMaterial({ color: 0x1f2b35, roughness: 0.94, metalness: 0.08, emissive: 0x061019, emissiveIntensity: 0.2 });
+    const lipMat = new THREE.MeshStandardMaterial({ color: 0x2d3b48, roughness: 0.88, metalness: 0.15, emissive: 0x0f1f2d, emissiveIntensity: 0.22 });
+
+    const xSeg = 240;
+    const zSeg = 14;
+
+    const floorMesh = this._makeSurfaceMesh(xSeg, zSeg, (u, v) => {
+      const x = lerp(this.visualStartX, this.visualEndX, u);
+      const p = this._sampleProfile(x);
+      const zBack = -p.halfWidth;
+      const zFront = p.halfWidth * 0.72;
+      const z = lerp(zBack, zFront, v);
+      const vn = (z - zBack) / Math.max(0.001, zFront - zBack);
+      const edgeLift = Math.pow(Math.abs(vn - 0.5) * 2, 1.35) * 0.24;
+      const noise = (Math.sin(x * 0.16 + z * 0.9) + Math.sin(x * 0.07 - z * 1.3)) * 0.035;
+      return [x, p.floorY + edgeLift + noise, z];
+    }, floorMat);
+    floorMesh.receiveShadow = true;
+    this.corridorGroup.add(floorMesh);
+    this._levelObjects.push(floorMesh);
+
+    const roofMesh = this._makeSurfaceMesh(xSeg, 9, (u, v) => {
+      const x = lerp(this.visualStartX, this.visualEndX, u);
+      const p = this._sampleProfile(x);
+      const zBack = -p.halfWidth;
+      const zFront = p.halfWidth * 0.12; // cutaway: do not extend full roof to camera side
+      const z = lerp(zBack, zFront, v);
+      const vn = (z - zBack) / Math.max(0.001, zFront - zBack);
+      const lipCurve = Math.pow(vn, 1.4) * 0.18;
+      const noise = (Math.sin(x * 0.12 + z * 1.6) + Math.sin(x * 0.21)) * 0.028;
+      return [x, p.ceilingY + lipCurve + noise, z];
+    }, roofMat);
+    roofMesh.castShadow = true;
+    roofMesh.receiveShadow = true;
+    this.corridorGroup.add(roofMesh);
+    this._levelObjects.push(roofMesh);
+
+    const backWall = this._makeSurfaceMesh(xSeg, 12, (u, v) => {
+      const x = lerp(this.visualStartX, this.visualEndX, u);
+      const p = this._sampleProfile(x);
+      const y = lerp(p.floorY - 0.12, p.ceilingY + 0.18, v);
+      const z = -p.halfWidth - 0.16 + Math.sin(y * 0.7 + x * 0.05) * 0.05;
+      return [x, y, z];
+    }, wallMat);
+    backWall.castShadow = true;
+    backWall.receiveShadow = true;
+    this.corridorGroup.add(backWall);
+    this._levelObjects.push(backWall);
+
+    // Top and bottom cutaway lips on the camera side, to make the cave opening read clearly.
+    const topLip = this._makeSurfaceMesh(xSeg, 4, (u, v) => {
+      const x = lerp(this.visualStartX, this.visualEndX, u);
+      const p = this._sampleProfile(x);
+      const z0 = p.halfWidth * 0.12;
+      const z1 = p.halfWidth * 0.56;
+      const z = lerp(z0, z1, v);
+      const t = (z - z0) / Math.max(0.001, z1 - z0);
+      const y = p.ceilingY - 0.06 + t * 0.38 + Math.sin(x * 0.12 + z) * 0.02;
+      return [x, y, z];
+    }, lipMat);
+    topLip.castShadow = true;
+    topLip.receiveShadow = true;
+    this.corridorGroup.add(topLip);
+    this._levelObjects.push(topLip);
+
+    const bottomLip = this._makeSurfaceMesh(xSeg, 4, (u, v) => {
+      const x = lerp(this.visualStartX, this.visualEndX, u);
+      const p = this._sampleProfile(x);
+      const z0 = p.halfWidth * 0.20;
+      const z1 = p.halfWidth * 0.64;
+      const z = lerp(z0, z1, v);
+      const t = (z - z0) / Math.max(0.001, z1 - z0);
+      const y = p.floorY - 0.12 + (1 - t) * 0.22 + Math.sin(x * 0.09 + z * 1.2) * 0.018;
+      return [x, y, z];
+    }, lipMat);
+    bottomLip.castShadow = true;
+    bottomLip.receiveShadow = true;
+    this.corridorGroup.add(bottomLip);
+    this._levelObjects.push(bottomLip);
+  }
+
+  _makeSurfaceMesh(xSeg, ySeg, pointFn, material) {
+    const verts = [];
+    const uvs = [];
+    const indices = [];
+
+    for (let i = 0; i <= xSeg; i++) {
+      const u = i / xSeg;
+      for (let j = 0; j <= ySeg; j++) {
+        const v = j / ySeg;
+        const p = pointFn(u, v);
+        verts.push(p[0], p[1], p[2]);
+        uvs.push(u, v);
+      }
+    }
+
+    const row = ySeg + 1;
+    for (let i = 0; i < xSeg; i++) {
+      for (let j = 0; j < ySeg; j++) {
+        const a = i * row + j;
+        const b = (i + 1) * row + j;
+        const c = (i + 1) * row + (j + 1);
+        const d = i * row + (j + 1);
+        indices.push(a, b, d, b, c, d);
+      }
+    }
+
+    const geom = new THREE.BufferGeometry();
+    geom.setAttribute("position", new THREE.Float32BufferAttribute(verts, 3));
+    geom.setAttribute("uv", new THREE.Float32BufferAttribute(uvs, 2));
+    geom.setIndex(indices);
+    geom.computeVertexNormals();
+
+    const mesh = new THREE.Mesh(geom, material);
+    return mesh;
+  }
+
+  _buildInteriorObstacles() {
+    const rockMat = new THREE.MeshStandardMaterial({
+      color: 0x303843,
+      roughness: 0.9,
+      metalness: 0.1,
+      emissive: 0x090d12,
+      emissiveIntensity: 0.15
+    });
+    const accentMat = new THREE.MeshStandardMaterial({
+      color: 0x506879,
+      roughness: 0.7,
+      metalness: 0.25,
+      emissive: 0x0b1824,
+      emissiveIntensity: 0.15
+    });
+
+    const segments = this.level?.segments || [];
+    for (const seg of segments) {
+      if (seg.type !== "rocks" || !Array.isArray(seg.items)) continue;
+      for (let i = 0; i < seg.items.length; i++) {
+        const item = seg.items[i];
+        const p = this._sampleProfile(item.x);
+        const r = Math.max(0.35, Number(item.r || 0.8));
+        const minY = p.floorY + r + 0.18;
+        const maxY = p.ceilingY - r - 0.18;
+        const maxNegZ = -0.45;
+        const minZ = -p.halfWidth + r + 0.18;
+        const maxZ = Math.min(maxNegZ, p.halfWidth * 0.18 - r);
+        const y = clamp(Number(item.y ?? (minY + maxY) * 0.5), minY, Math.max(minY, maxY));
+        const z = clamp(Number(item.z ?? -1), minZ, Math.max(minZ, maxZ));
+
+        const mesh = new THREE.Mesh(
+          new THREE.DodecahedronGeometry(r, 1),
+          i % 2 === 0 ? rockMat : accentMat
+        );
+        mesh.position.set(item.x, y, z);
+        mesh.scale.set(item.sx || 1, item.sy || 1, item.sz || 1);
+        mesh.rotation.set(hash1(item.x + i) * Math.PI, hash1(item.x + i + 2) * Math.PI, hash1(item.x + i + 4) * Math.PI);
+        mesh.castShadow = true;
+        mesh.receiveShadow = true;
+        this.obstacleGroup.add(mesh);
+        this._obstacleMeshes.push(mesh);
+
+        const maxScale = Math.max(mesh.scale.x, mesh.scale.y, mesh.scale.z);
+        this._obstacleColliders.push({
+          center: mesh.position.clone(),
+          radius: r * maxScale * 0.92
+        });
+      }
+    }
+  }
+
+  _buildLevelScenery() {
+    const routeLen = Math.max(24, this.routeEndX - this.routeStartX);
+    const xMin = this.visualStartX;
+    const xMax = this.visualEndX;
+    const count = Math.max(16, Math.round(routeLen / 5));
+
+    const sideMatNear = new THREE.MeshStandardMaterial({ color: 0x171d25, roughness: 0.94, metalness: 0.08, emissive: 0x06080b, emissiveIntensity: 0.08 });
+    const sideMatFar = new THREE.MeshStandardMaterial({ color: 0x121720, roughness: 0.96, metalness: 0.04, emissive: 0x05070a, emissiveIntensity: 0.06 });
+
+    for (let i = 0; i < count; i++) {
+      const t = i / Math.max(1, count - 1);
+      const x = lerp(xMin, xMax, t);
+      const p = this._sampleProfile(x);
+      const h = 3.2 + hash1(x * 0.13) * 5.0;
+      const w = 1.8 + hash1(x * 0.09 + 5) * 2.8;
+
+      const leftRim = new THREE.Mesh(new THREE.BoxGeometry(w, h, 3.0 + hash1(x * 0.17) * 3.5), sideMatFar);
+      leftRim.position.set(x, p.floorY + h * 0.5, -p.halfWidth - 3.8 - hash1(x) * 2.8);
+      leftRim.castShadow = true;
+      leftRim.receiveShadow = true;
+      this.fxGroup.add(leftRim);
+
+      if (i % 2 === 0) {
+        const rightRim = new THREE.Mesh(new THREE.BoxGeometry(w * 0.85, h * 0.8, 1.5 + hash1(x * 0.23) * 2.0), sideMatNear);
+        rightRim.position.set(x, p.floorY + h * 0.4, p.halfWidth * 0.8 + 2.2 + hash1(x * 0.07) * 2.0);
+        rightRim.castShadow = true;
+        rightRim.receiveShadow = true;
+        this.fxGroup.add(rightRim);
+      }
+    }
+
+    // Subtle sci-fi guide lights along the back wall.
+    const guideMat = new THREE.MeshBasicMaterial({ color: 0x2bd7ff, transparent: true, opacity: 0.18 });
+    const guideGeom = new THREE.BoxGeometry(0.4, 0.05, 0.05);
+    for (let i = 0; i < Math.floor(routeLen / 4); i++) {
+      const x = this.routeStartX + 2 + i * 4;
+      if (x >= this.routeEndX - 4) break;
+      const p = this._sampleProfile(x);
+      const y = p.floorY + 0.55 + (i % 2) * 0.15;
+      const z = -p.halfWidth - 0.08;
+      const strip = new THREE.Mesh(guideGeom, guideMat);
+      strip.position.set(x, y, z);
+      this.fxGroup.add(strip);
+    }
   }
 
   groundHeightAt(x, z) {
-    return this._terrainHeightAt(x, z);
+    void z;
+    return this._sampleProfile(x).floorY;
   }
 
   checkTunnelCollision(pos, radius = 0.38) {
-    for (const box of this._tunnelCollisionBoxes) {
-      if (this._sphereHitsBox(pos, radius, box)) return true;
+    const xMin = this.routeStartX - 0.6;
+    const xMax = this.routeEndX + 0.6;
+    if (pos.x < xMin || pos.x > xMax) return false;
+
+    const p = this._sampleProfile(pos.x);
+    const floor = p.floorY;
+    const ceil = p.ceilingY;
+    const backWall = -p.halfWidth;
+
+    if (pos.y + radius > ceil) return true;
+    if (pos.z - radius < backWall) return true;
+
+    // No collision on the camera-side cutaway wall; rely on recentering and obstacle/floor/ceiling constraints.
+    for (const c of this._obstacleColliders) {
+      const dx = pos.x - c.center.x;
+      const dy = pos.y - c.center.y;
+      const dz = pos.z - c.center.z;
+      const rr = radius + c.radius;
+      if (dx * dx + dy * dy + dz * dz <= rr * rr) return true;
     }
+
+    // Leave floor collision to Game terrain/pad logic for consistent landing handling.
     return false;
-  }
-
-  flightCeilingY() {
-    return this._flightCeilingY;
-  }
-
-  checkRoofCollision(pos) {
-    if (!this.roof.visible) return false;
-    const half = {
-      x: 10 * this.roof.scale.x,
-      y: 0.5 * this.roof.scale.y,
-      z: 9 * this.roof.scale.z
-    };
-    const c = this.roof.position;
-    return (
-      Math.abs(pos.x - c.x) < half.x &&
-      Math.abs(pos.y - c.y) < half.y &&
-      Math.abs(pos.z - c.z) < half.z
-    );
   }
 
   isOverLandingPad(pos) {
@@ -1097,43 +723,32 @@ export class World {
   }
 
   landingPadTopY() {
-    return this.landingPad.position.y + 0.5;
+    return this.landingPad.position.y + (this.landingPad.userData.deckTop ?? 0.5);
   }
 
   launchPadTopY() {
-    return this.launchPad.position.y + 0.5;
+    return this.launchPad.position.y + (this.launchPad.userData.deckTop ?? 0.5);
   }
 
   landingPadAimPoint(target = new THREE.Vector3()) {
-    return target.set(
-      this.landingPad.position.x,
-      this.landingPadTopY() + 0.25,
-      this.landingPad.position.z
-    );
+    return target.set(this.landingPad.position.x, this.landingPadTopY() + 0.35, this.landingPad.position.z);
   }
 
   update(dt, focus) {
     this._time += dt;
 
     if (focus) {
-      this.skyDome.position.x = focus.x * 0.25;
-      this.skyDome.position.z = focus.z * 0.25;
-      this.skyDome.position.y = Math.max(18, focus.y * 0.3 + 12);
+      const centerX = focus.x * 0.06;
+      this.backdropGroup.position.x = centerX;
+      this.skyDome.position.x = focus.x * 0.02;
+      this.hazePlane.position.x = focus.x * 0.05;
     }
 
-    this.starField.rotation.y += dt * 0.012;
-    this.starField.rotation.z = Math.sin(this._time * 0.09) * 0.06;
+    this.starField.rotation.y += dt * 0.01;
+    this.hazePlane.material.opacity = 0.16 + Math.sin(this._time * 0.32) * 0.02;
 
-    this.horizonGlowA.material.opacity = 0.14 + Math.sin(this._time * 1.2) * 0.04;
-    this.horizonGlowB.material.opacity = 0.08 + Math.sin(this._time * 0.85 + 1.3) * 0.03;
-
-    this.launchGlow.intensity = 2.2 + Math.sin(this._time * 2.2) * 0.35;
-    this.landingGlow.intensity = 1.9 + Math.sin(this._time * 1.7 + 0.9) * 0.3;
-
-    if (this.canyonHaze) {
-      const base = this._canyonHazeBaseOpacity ?? 0.08;
-      this.canyonHaze.material.opacity = Math.max(0.02, base + Math.sin(this._time * 0.45) * 0.01);
-      this.canyonHaze.rotation.z = Math.sin(this._time * 0.08) * 0.015;
+    for (const p of this._lightsPulse) {
+      p.light.intensity = p.base + Math.sin(this._time * p.speed) * p.amp;
     }
   }
 }

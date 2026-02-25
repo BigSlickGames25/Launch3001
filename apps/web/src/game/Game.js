@@ -5,7 +5,9 @@ import { Physics } from "./Physics.js";
 import { Input } from "./Input.js";
 import { UI } from "./UI.js";
 import { LEVELS } from "./Levels.js";
-import { clamp } from "./utils.js";
+import { clamp, lerp, smooth } from "./utils.js";
+
+const MAX_LEVELS = 10;
 
 export class Game {
   constructor({ canvas }) {
@@ -16,15 +18,18 @@ export class Game {
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = 1.05;
+    this.renderer.toneMappingExposure = 1.03;
 
     this.scene = new THREE.Scene();
-    this.scene.fog = new THREE.Fog(0x05060a, 12, 90);
+    this.scene.fog = new THREE.Fog(0x05070a, 26, 180);
 
-    this.camera = new THREE.PerspectiveCamera(65, 1, 0.1, 200);
-    this.camMode = "CHASE";
+    this.camera = new THREE.PerspectiveCamera(56, 1, 0.1, 260);
     this._camA = new THREE.Vector3();
     this._camB = new THREE.Vector3();
+    this._camC = new THREE.Vector3();
+    this._camD = new THREE.Vector3();
+    this._camPos = new THREE.Vector3();
+    this._camTarget = new THREE.Vector3();
 
     this.ui = new UI();
     this.input = new Input({ canvas, ui: this.ui });
@@ -38,16 +43,22 @@ export class Game {
     this.levelIndex = 0;
     this.score = 0;
     this.best = Number(localStorage.getItem("launcher_best") || "0");
-    this.state = "READY";
+
+    this.state = "READY"; // READY | FLYING_SIDE | FINISH_3D | LANDED | CRASHED | LEVEL_TRANSITION
     this.sensitivityScale = 1.8;
     this.gravityScale = 1.0;
-    this._ceilingWarnCooldown = 0;
+
+    this._finishCamBlend = 0;
+    this._queuedTimer = 0;
+    this._queuedAction = null;
+    this._wasPaused = false;
 
     this._bindUI();
     this.input.setSensitivityScale(this.sensitivityScale);
     this.ui.setSensitivityScale(this.sensitivityScale);
     this.ui.setGravityScale(this.gravityScale);
-    this.ui.setLevelJumpBounds(Math.min(10, LEVELS.length));
+    this.ui.setLevelJumpBounds(Math.min(MAX_LEVELS, LEVELS.length));
+
     this._resize();
     window.addEventListener("resize", () => this._resize());
 
@@ -55,40 +66,48 @@ export class Game {
   }
 
   _bindUI() {
-    this.ui.btnMenu.addEventListener("click", () => this.ui.toggleMenu());
-    this.ui.btnMenuClose.addEventListener("click", () => this.ui.toggleMenu(false));
+    this.ui.btnMenu?.addEventListener("click", () => {
+      this.ui.showPauseDrawer(!this.ui.isMenuOpen());
+    });
 
-    this.ui.btnReset.addEventListener("click", () => {
+    this.ui.btnMenuClose?.addEventListener("click", () => {
+      this.ui.showPauseDrawer(false);
+    });
+
+    this.ui.btnReset?.addEventListener("click", () => {
       this.resetLevel();
-      this.ui.toggleMenu(false);
-    });
-    this.ui.btnCam.addEventListener("click", () => {
-      this.ui.setStatus("SIDE CAMERA", "ok");
-      this.ui.toggleMenu(false);
+      this.ui.showPauseDrawer(false);
+      this._banner("READY", "info");
     });
 
-    this.ui.sensRange.addEventListener("input", (e) => {
+    this.ui.btnCam?.addEventListener("click", () => {
+      this._banner("AUTO CAMERA", "info");
+      this.ui.showPauseDrawer(false);
+    });
+
+    this.ui.sensRange?.addEventListener("input", (e) => {
       const nextScale = clamp(Number(e.target.value) / 100, 0.25, 2.6);
       this.sensitivityScale = nextScale;
       this.input.setSensitivityScale(nextScale);
       this.ui.setSensitivityScale(nextScale);
     });
 
-    this.ui.gravRange.addEventListener("input", (e) => {
+    this.ui.gravRange?.addEventListener("input", (e) => {
       const nextScale = clamp(Number(e.target.value) / 100, 0.4, 1.0);
       this.gravityScale = nextScale;
-      this.physics.gravity = LEVELS[this.levelIndex].gravity * nextScale;
+      const level = LEVELS[this.levelIndex];
+      this.physics.gravity = (level?.gravity ?? 9.8) * nextScale;
       this.ui.setGravityScale(nextScale);
     });
 
     const loadSelectedLevel = () => {
-      const maxLevel = Math.min(10, LEVELS.length);
+      const maxLevel = Math.min(MAX_LEVELS, LEVELS.length);
       const raw = Number(this.ui.levelJumpInput?.value ?? (this.levelIndex + 1));
       const levelNum = clamp(Math.round(Number.isFinite(raw) ? raw : 1), 1, maxLevel);
       this.score = 0;
       this.ui.setLevelJumpValue(levelNum);
       this.loadLevel(levelNum - 1);
-      this.ui.toggleMenu(false);
+      this.ui.showPauseDrawer(false);
     };
 
     this.ui.btnGoLevel?.addEventListener("click", loadSelectedLevel);
@@ -97,6 +116,21 @@ export class Game {
       e.preventDefault();
       loadSelectedLevel();
     });
+  }
+
+  _banner(text, mode = "info") {
+    if (this.ui.setBanner) this.ui.setBanner(text, mode);
+    else this.ui.setStatus(text, mode);
+  }
+
+  _queueAction(delaySeconds, fn) {
+    this._queuedTimer = Math.max(0, delaySeconds || 0);
+    this._queuedAction = fn || null;
+  }
+
+  _clearQueuedAction() {
+    this._queuedTimer = 0;
+    this._queuedAction = null;
   }
 
   start() {
@@ -112,7 +146,8 @@ export class Game {
   }
 
   loadLevel(idx) {
-    this.levelIndex = clamp(idx, 0, Math.min(10, LEVELS.length) - 1);
+    const cap = Math.min(MAX_LEVELS, LEVELS.length);
+    this.levelIndex = clamp(idx, 0, cap - 1);
     const level = LEVELS[this.levelIndex];
 
     this.physics.gravity = level.gravity * this.gravityScale;
@@ -122,64 +157,113 @@ export class Game {
     this.resetLevel();
     this.ui.setLevelJumpValue(this.levelIndex + 1);
 
-    this.ui.setStatus(`LEVEL ${this.levelIndex + 1}`, "ok");
+    this._banner(`LEVEL ${this.levelIndex + 1}`, "ok");
   }
 
   resetLevel() {
     this.state = "READY";
-    this.camMode = "SIDE";
     this.rocket.reset(this.world.spawn);
     this.input.clearThrustState();
-    this._ceilingWarnCooldown = 0;
+    this._finishCamBlend = 0;
+    this._clearQueuedAction();
   }
 
   nextLevel() {
+    const cap = Math.min(MAX_LEVELS, LEVELS.length);
     const next = this.levelIndex + 1;
-    if (next >= Math.min(10, LEVELS.length)) {
-      this.ui.setStatus("RUN CLEAR", "ok");
-      setTimeout(() => this.loadLevel(0), 900);
+    if (next >= cap) {
+      this.state = "LEVEL_TRANSITION";
+      this._banner("RUN CLEAR", "ok");
+      this._queueAction(1.15, () => {
+        this.score = 0;
+        this.loadLevel(0);
+      });
       return;
     }
-    this.loadLevel(next);
+
+    this.state = "LEVEL_TRANSITION";
+    this._banner("LEVEL CLEAR", "ok");
+    this._queueAction(0.95, () => this.loadLevel(next));
+  }
+
+  _isFlyingState() {
+    return this.state === "FLYING_SIDE" || this.state === "FINISH_3D";
+  }
+
+  _advanceQueued(dt) {
+    if (!this._queuedAction) return;
+    this._queuedTimer -= dt;
+    if (this._queuedTimer > 0) return;
+    const fn = this._queuedAction;
+    this._queuedAction = null;
+    this._queuedTimer = 0;
+    fn();
   }
 
   update(dt) {
     this.input.update(dt);
 
-    if (this.state === "READY" && (this.input.thrustHeld || Math.abs(this.input.tilt.x) > 0.05)) {
-      this.state = "FLYING";
-      this.ui.setStatus("GO!", "ok");
+    const paused = this.ui.isMenuOpen?.() ?? false;
+    if (paused !== this._wasPaused) {
+      this.ui.setPauseState?.(paused);
+      this._wasPaused = paused;
     }
 
-    if (this.state === "FLYING") {
-      this.physics.apply(this.rocket, this.input, dt);
+    if (!paused) {
+      this._advanceQueued(dt);
 
-      const groundY = this.world.groundHeightAt(this.rocket.pos.x, this.rocket.pos.z);
-
-      if (this.world.checkTunnelCollision(this.rocket.pos, 0.42)) {
-        this.crash("TUNNEL HIT");
-        return;
+      if (this.state === "READY" && (this.input.thrustHeld || Math.abs(this.input.tilt.x) > 0.05)) {
+        this.state = "FLYING_SIDE";
+        this._banner("GO", "ok");
       }
 
-      const launchPadTop = this.world.launchPadTopY();
-      const onLaunchArea = this.world.isOverLaunchPad(this.rocket.pos) && (this.rocket.pos.y <= launchPadTop + 0.7);
-      if (onLaunchArea && this.rocket.pos.y <= launchPadTop + 0.6) {
-        this.rocket.pos.y = launchPadTop + 0.6;
-        this.rocket.vel.y = Math.max(0, this.rocket.vel.y);
-        this.rocket.vel.x *= 0.9;
-        this.rocket.vel.z *= 0.9;
+      if (this._isFlyingState()) {
+        this.physics.apply(this.rocket, this.input, dt);
+
+        // Side-scroller feel: softly recenter depth so the rocket stays readable in a side view.
+        const zVelDrag = Math.exp(-7.0 * dt);
+        const zPosDrag = Math.exp(-3.2 * dt);
+        this.rocket.vel.z *= zVelDrag;
+        this.rocket.pos.z *= zPosDrag;
+        this.rocket.pos.z = clamp(this.rocket.pos.z, -6, 4);
+
+        if (this.state === "FLYING_SIDE" && this.rocket.pos.x >= this.world.finishApproachX) {
+          this.state = "FINISH_3D";
+          this._banner("APPROACH", "info");
+        }
+
+        const groundY = this.world.groundHeightAt(this.rocket.pos.x, this.rocket.pos.z);
+
+        if (this.world.checkTunnelCollision(this.rocket.pos, 0.42)) {
+          this.crash("CAVE WALL");
+          return;
+        }
+
+        const launchPadTop = this.world.launchPadTopY();
+        const onLaunchArea = this.world.isOverLaunchPad(this.rocket.pos) && (this.rocket.pos.y <= launchPadTop + 0.8);
+        if (onLaunchArea && this.rocket.pos.y <= launchPadTop + 0.6) {
+          this.rocket.pos.y = launchPadTop + 0.6;
+          this.rocket.vel.y = Math.max(0, this.rocket.vel.y);
+          this.rocket.vel.x *= 0.9;
+          this.rocket.vel.z *= 0.9;
+        }
+
+        const padTop = this.world.landingPadTopY();
+        const onLandingArea = this.world.isOverLandingPad(this.rocket.pos) && (this.rocket.pos.y <= padTop + 0.8);
+
+        if (!onLandingArea && !onLaunchArea && this.rocket.pos.y <= groundY + 0.65) {
+          this.crash("GROUND");
+          return;
+        }
+
+        if (onLandingArea && this.rocket.pos.y <= padTop + 0.6) {
+          this.tryLand();
+          return;
+        }
       }
 
-      const padTop = this.world.landingPadTopY();
-      const onLandingArea = this.world.isOverLandingPad(this.rocket.pos) && (this.rocket.pos.y <= padTop + 0.7);
-
-      if (!onLandingArea && !onLaunchArea && this.rocket.pos.y <= groundY + 0.65) {
-        this.crash("TERRAIN HIT");
-      }
-
-      if (onLandingArea && this.rocket.pos.y <= padTop + 0.6) {
-        this.tryLand();
-      }
+      const finishTarget = (this.state === "FINISH_3D" || this.state === "LANDED" || this.state === "LEVEL_TRANSITION") ? 1 : 0;
+      this._finishCamBlend = smooth(this._finishCamBlend, finishTarget, 10.5, dt);
     }
 
     this.world.update(dt, this.rocket.pos);
@@ -210,24 +294,22 @@ export class Game {
   }
 
   tryLand() {
-    const { vspd, hspd, ang } = this.rocket.getMetrics();
+    if (!this._isFlyingState()) return;
 
+    const { vspd, hspd, ang } = this.rocket.getMetrics();
     const okV = Math.abs(vspd) <= this.physics.maxVspd;
     const okH = hspd <= this.physics.maxHspd;
     const okA = ang <= this.physics.maxAngleDeg;
 
     if (!okV || !okH || !okA) {
-      const reason = !okV ? `TOO FAST VSPD ${vspd.toFixed(1)}` :
-                     !okH ? `TOO FAST HSPD ${hspd.toFixed(1)}` :
-                     `BAD ANGLE ${Math.round(ang)}°`;
-      this.crash(`CRASH: ${reason}`);
+      this.crash("CRASH");
       return;
     }
 
     this.state = "LANDED";
-    this.camMode = "SIDE";
     this.rocket.vel.set(0, 0, 0);
     this.rocket.pos.y = this.world.landingPadTopY() + 0.6;
+    this.rocket.pos.z = smooth(this.rocket.pos.z, this.world.landingPad.position.z, 8, 1 / 60);
 
     const bonus = Math.max(0, Math.round(100 - (hspd * 8 + Math.abs(vspd) * 6 + ang * 2)));
     this.score += 100 + bonus;
@@ -237,37 +319,62 @@ export class Game {
       localStorage.setItem("launcher_best", String(this.best));
     }
 
-    this.ui.setStatus(`LANDED +${100 + bonus}`, "ok");
-    setTimeout(() => this.nextLevel(), 900);
+    this.nextLevel();
   }
 
-  crash(msg) {
-    if (this.state !== "FLYING") return;
+  crash(msg = "CRASH") {
+    if (!this._isFlyingState()) return;
     this.state = "CRASHED";
-    this.ui.setStatus(msg, "warn");
-    setTimeout(() => {
+    this._banner(msg, "warn");
+    this._queueAction(0.95, () => {
       this.score = 0;
       this.loadLevel(0);
-    }, 900);
+    });
   }
 
   render() {
     const p = this.rocket.pos;
-    const routeSpan = Math.max(16, Math.abs(this.world.landingPad.position.x - this.world.spawn.x));
-    const distToPad = Math.abs(this.world.landingPad.position.x - p.x);
-    const padZoom = clamp(distToPad / routeSpan, 0, 1);
-    const speed = this.rocket.vel.length();
-    const speedZoom = clamp(speed / 10, 0, 1);
-    const zoom = Math.max(padZoom * 0.7, speedZoom * 0.7);
-    const camHeight = 1.6 + zoom * 2.8;
-    const camDepth = 6.2 + zoom * 7.2;
+    const level = LEVELS[this.levelIndex] || LEVELS[0];
+    const camCfg = level?.camera || {};
 
-    // Fixed side-scroller camera: rocket stays centered on screen.
-    this._camA.set(p.x, p.y + camHeight, p.z + camDepth);
-    this.camera.position.lerp(this._camA, 0.16);
-    this._camB.set(p.x, p.y + 0.8, p.z);
-    this.camera.lookAt(this._camB.x, this._camB.y, this._camB.z);
-    this.camera.fov = 48 + zoom * 12;
+    const routeSpan = Math.max(18, this.world.routeEndX - this.world.routeStartX);
+    const distToFinish = Math.max(0, this.world.routeEndX - p.x);
+    const finishDistNorm = clamp(distToFinish / routeSpan, 0, 1);
+    const speedZoom = clamp(this.rocket.vel.length() / 10, 0, 1);
+    const openZoom = this.world.openSpaceFactorAt ? this.world.openSpaceFactorAt(p.x) : 0;
+    const zoom = clamp(Math.max(speedZoom * 0.75, finishDistNorm * 0.55, openZoom * 0.45), 0, 1);
+
+    const sideDepth = (camCfg.gameplayDepth ?? 7.2) + zoom * 6.4;
+    const sideHeight = (camCfg.gameplayHeight ?? 2.1) + zoom * 2.8;
+    const sideFov = lerp(camCfg.minFov ?? 48, camCfg.maxFov ?? 60, zoom);
+
+    this._camA.set(p.x, p.y + sideHeight, p.z + sideDepth);
+    this._camB.set(p.x, p.y + 0.82, p.z);
+
+    const padPos = this.world.landingPad.position;
+    const padTop = this.world.landingPadTopY();
+    const finishSide = camCfg.finishSide ?? 6.8;
+    const finishDepth = camCfg.finishDepth ?? 10.5;
+    const finishHeight = camCfg.finishHeight ?? 5.4;
+    const finishFov = camCfg.finishFov ?? 58;
+
+    this._camC.set(
+      lerp(p.x, padPos.x - finishSide, 0.68),
+      Math.max(p.y + 3.0, padTop + finishHeight),
+      lerp(p.z + finishDepth, padPos.z + finishDepth * 0.85, 0.35)
+    );
+    this._camD.set(
+      lerp(p.x, padPos.x, 0.58),
+      lerp(p.y + 0.8, padTop + 0.75, 0.72),
+      lerp(p.z, padPos.z, 0.62)
+    );
+
+    this._camPos.copy(this._camA).lerp(this._camC, this._finishCamBlend);
+    this._camTarget.copy(this._camB).lerp(this._camD, this._finishCamBlend);
+
+    this.camera.position.lerp(this._camPos, 0.18);
+    this.camera.lookAt(this._camTarget.x, this._camTarget.y, this._camTarget.z);
+    this.camera.fov = lerp(sideFov, finishFov, this._finishCamBlend);
     this.camera.updateProjectionMatrix();
 
     this.renderer.render(this.scene, this.camera);

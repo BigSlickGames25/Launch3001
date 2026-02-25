@@ -3,118 +3,81 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no" />
-  <title>LAUNCHER - Neon Lander 3D</title>
+  <title>LAUNCHER - Side Scroller Lander</title>
   <link rel="stylesheet" href="/src/styles/ui.css" />
 </head>
 <body>
-  <div id="app" class="score-only-ui">
+  <div id="app" class="side-scroll-ui">
     <canvas id="c"></canvas>
-    <div id="uiAtmos" aria-hidden="true">
-      <div class="ui-glow ui-glow-a"></div>
-      <div class="ui-glow ui-glow-b"></div>
-      <div class="ui-grid"></div>
-      <div class="ui-vignette"></div>
+
+    <div id="hud" aria-label="HUD">
+      <div class="hud-stats" aria-label="Score and level">
+        <div class="stat-pill"><span class="k">LVL</span><span id="lvl">1</span></div>
+        <div class="stat-pill"><span class="k">SCORE</span><span id="score">0</span></div>
+        <div class="stat-pill"><span class="k">BEST</span><span id="best">0</span></div>
+      </div>
+      <button id="btnMenu" class="pause-btn" type="button" aria-label="Pause and settings">PAUSE</button>
     </div>
 
-    <div id="hud">
-      <div class="hud-card hud-stats">
-        <div class="card-title">Flight Data</div>
-        <div class="row"><span class="k">LVL</span> <span id="lvl">1</span></div>
-        <div class="row"><span class="k">SCORE</span> <span id="score">0</span></div>
-        <div class="row"><span class="k">BEST</span> <span id="best">0</span></div>
-      </div>
+    <div id="status" class="center-banner" data-mode="info" aria-live="polite">READY</div>
 
-      <div class="hud-card hud-center">
-        <div class="center-head">
-          <div class="card-title">Guidance</div>
-          <div class="signal-dot"></div>
-        </div>
-        <div id="status" class="status">READY</div>
-        <div class="telemetry-box">
-          <div class="telemetry-grid" id="gyroPad" aria-label="Gyro movement indicator">
-            <div class="telemetry-line telemetry-line-h"></div>
-            <div class="telemetry-line telemetry-line-v"></div>
-            <div class="telemetry-ring"></div>
-            <div id="gyroBall" class="telemetry-ball"></div>
-          </div>
-          <div class="telemetry-labels">
-            <span>STEER</span>
-            <span>PITCH</span>
-          </div>
-        </div>
-      </div>
+    <div id="menuScrim" class="menu-scrim hidden" aria-hidden="true"></div>
 
-      <div class="hud-card hud-actions">
-        <div class="card-title">Command</div>
-        <button id="btnMenu">Settings</button>
-      </div>
-    </div>
-
-    <div id="settingsMenu" class="settings-menu hidden">
-      <div class="menu-head">
+    <aside id="settingsMenu" class="pause-drawer hidden" aria-label="Pause and settings">
+      <div class="drawer-head">
         <div>
-          <div class="menu-title">Flight Systems</div>
-          <div class="menu-subtitle">Controls, tuning, and testing</div>
+          <div class="drawer-title">Pause / Systems</div>
+          <div class="drawer-subtitle">Flight tuning and control settings</div>
         </div>
-        <button id="btnMenuClose" class="menu-close" aria-label="Close settings">&times;</button>
+        <button id="btnMenuClose" class="menu-close" type="button" aria-label="Resume game">RESUME</button>
       </div>
-      <div class="menu-section">
-        <div class="menu-section-title">Input</div>
-        <div class="button-stack">
-          <button id="btnMotion">Enable Tilt</button>
-          <button id="btnCal">Calibrate</button>
-          <button id="btnSteer">Steering: Upright</button>
-          <button id="btnSwapSides">Control Sides: Default</button>
-          <button id="btnInvertLR">Invert L/R: Off</button>
-          <button id="btnInvertFB">Invert F/B: Off</button>
+
+      <div class="drawer-section">
+        <div class="drawer-label">Controls</div>
+        <div class="stack">
+          <button id="btnSteer" type="button">Steering: Joystick</button>
+          <button id="btnSwapSides" type="button">Control Sides: Default</button>
+          <button id="btnInvertLR" type="button">Invert L/R: Off</button>
+          <button id="btnInvertFB" type="button">Invert F/B: Off</button>
+          <button id="btnMotion" type="button">Enable Tilt</button>
+          <button id="btnCal" type="button">Calibrate</button>
         </div>
       </div>
 
-      <div class="menu-section">
-        <div class="menu-section-title">Flight Tuning</div>
-        <div class="slider-group">
-        <div class="slider-row">
-          <span>Sensitivity</span>
-          <span id="sensValue">180%</span>
-        </div>
-        <input id="sensRange" type="range" min="25" max="260" step="5" value="180" />
-        </div>
-        <div class="slider-group">
-        <div class="slider-row">
-          <span>Gravity</span>
-          <span id="gravValue">100%</span>
-        </div>
-        <input id="gravRange" type="range" min="40" max="100" step="5" value="100" />
-        </div>
+      <div class="drawer-section">
+        <div class="drawer-label">Flight Tuning</div>
+        <label class="slider-block" for="sensRange">
+          <div class="slider-row"><span>Sensitivity</span><span id="sensValue">180%</span></div>
+          <input id="sensRange" type="range" min="25" max="260" step="5" value="180" />
+        </label>
+        <label class="slider-block" for="gravRange">
+          <div class="slider-row"><span>Gravity</span><span id="gravValue">100%</span></div>
+          <input id="gravRange" type="range" min="40" max="100" step="5" value="100" />
+        </label>
       </div>
 
-      <div class="menu-section">
-        <div class="menu-section-title">Level Testing</div>
-        <div class="level-jump-group">
-        <div class="slider-row">
-          <span>Test Level</span>
-          <span id="levelJumpMax">Max 100</span>
-        </div>
+      <div class="drawer-section">
+        <div class="drawer-label">Level Test</div>
+        <div class="slider-row"><span>Test Level</span><span id="levelJumpMax">Max 10</span></div>
         <div class="level-jump-row">
-          <input id="levelJumpInput" type="number" min="1" max="100" step="1" value="1" inputmode="numeric" />
+          <input id="levelJumpInput" type="number" min="1" max="10" step="1" value="1" inputmode="numeric" />
           <button id="btnGoLevel" type="button">Load</button>
         </div>
-        </div>
       </div>
 
-      <div class="menu-section">
-        <div class="menu-section-title">Session</div>
-        <div class="button-stack">
-          <button id="btnCam">Cam: Chase</button>
-          <button id="btnReset">Reset</button>
+      <div class="drawer-section">
+        <div class="drawer-label">Session</div>
+        <div class="stack">
+          <button id="btnReset" type="button">Restart Level</button>
+          <button id="btnCam" type="button" class="dev-hidden">Cam: Auto</button>
         </div>
-        <div id="pcHint" class="hint">PC: Space thrust / A-D steer / W-S pitch</div>
+        <div id="pcHint" class="pc-hint">PC: Space boost / A-D move / W-S trim</div>
       </div>
-    </div>
+    </aside>
 
     <div id="mobileControls" aria-label="Touch controls">
       <div id="joystickWrap" class="control-cluster hidden">
-        <div class="control-label">STEER</div>
+        <div class="control-label">MOVE</div>
         <div id="joystickPad" class="joystick-pad" aria-label="Virtual joystick">
           <div class="joystick-grid"></div>
           <div class="joystick-ring"></div>
@@ -124,7 +87,7 @@
 
       <div class="control-cluster boost-cluster">
         <div class="control-label">BOOST</div>
-        <button id="btnBoost" class="boost-btn" aria-label="Boost">
+        <button id="btnBoost" class="boost-btn" type="button" aria-label="Boost">
           <span class="boost-rings"></span>
           <span class="boost-shell"></span>
           <span class="boost-core"></span>

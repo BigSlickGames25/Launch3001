@@ -1,80 +1,241 @@
-const TOTAL_LEVELS = 10;
-const TUNING_SPAN_LEVELS = TOTAL_LEVELS;
+const CAMERA_DEFAULT = {
+  gameplayDepth: 7.2,
+  gameplayHeight: 2.1,
+  minFov: 48,
+  maxFov: 60,
+  finishDepth: 10.5,
+  finishHeight: 5.4,
+  finishSide: 6.8,
+  finishFov: 58
+};
 
-export const LEVELS = Array.from({ length: TOTAL_LEVELS }, (_, idx) => {
-  const tunedIdx = Math.min(idx, TUNING_SPAN_LEVELS - 1);
-  const t = tunedIdx / (TUNING_SPAN_LEVELS - 1);
-  const terrainAmp = idx === 0 ? 0 : Number((0.18 + idx * 0.17).toFixed(2));
-  const craterCount = idx === 0 ? 0 : Math.min(6 + idx * 2, 28);
-  const landingPadSize = idx < 10 ? 6.0 : Number(Math.max(2.4, 6.0 - (idx - 9) * 0.65).toFixed(2));
-  const mountainCount = idx < 2 ? 0 : Math.min(2 + idx, 10);
-  const chasmCount = idx < 4 ? 0 : Math.min(1 + Math.floor((idx - 3) * 0.9), 5);
-  const centerSpireCount = idx < 3 ? 0 : Math.min(1 + Math.floor((idx - 2) * 0.75), 5);
-  const tunnelGateCount = idx < 5 ? 0 : Math.min(1 + Math.floor((idx - 4) * 0.8), 5);
-  const corridorHalfWidth = idx === 0
-    ? 6.2
-    : Number(Math.max(1.8, 5.4 - idx * 0.28 - Math.max(0, idx - 5) * 0.18).toFixed(2));
-  const corridorFlattenStrength = idx === 0
-    ? 1.0
-    : Number(Math.max(0.08, 0.9 - idx * 0.1 - Math.max(0, idx - 5) * 0.07).toFixed(2));
-  const mountainHeight = idx < 2 ? 0 : Number((1.3 + idx * 0.48 + Math.max(0, idx - 5) * 0.32).toFixed(2));
-  const mountainIntrusion = idx < 2 ? 0 : Number(Math.min(1.0, 0.22 + idx * 0.085).toFixed(2));
-  const chasmDepth = idx < 4 ? 0 : Number((1.4 + idx * 0.52 + Math.max(0, idx - 6) * 0.45).toFixed(2));
-  const ceilingMargin = idx === 0
-    ? 6.5
-    : Number(Math.max(1.15, 4.4 - idx * 0.34 - Math.max(0, idx - 5) * 0.22).toFixed(2));
-  const tunnelGapWidth = idx < 4
-    ? 0
-    : Number(Math.max(4.2, 6.1 - idx * 0.11 - Math.max(0, idx - 8) * 0.07).toFixed(2));
-  const tunnelGapHeight = idx < 4
-    ? 0
-    : Number(Math.max(4.7, 6.6 - idx * 0.16 - Math.max(0, idx - 7) * 0.08).toFixed(2));
-  const routeLength = Number(Math.min(110, 24 + idx * 3.2 + Math.max(0, idx - 5) * 2.4 + Math.max(0, idx - 9) * 2.0).toFixed(2));
+function smoothCamera(overrides = {}) {
+  return { ...CAMERA_DEFAULT, ...overrides };
+}
+
+function mapSegmentPositions(routeLength, defs) {
+  const startX = -routeLength * 0.5;
+  return defs.map((seg) => {
+    const out = { ...seg };
+    if (typeof seg.n0 === "number") out.x0 = startX + seg.n0 * routeLength;
+    if (typeof seg.n1 === "number") out.x1 = startX + seg.n1 * routeLength;
+    delete out.n0;
+    delete out.n1;
+
+    if (Array.isArray(seg.items)) {
+      out.items = seg.items.map((item) => {
+        const mapped = { ...item };
+        if (typeof item.n === "number") mapped.x = startX + item.n * routeLength;
+        delete mapped.n;
+        return mapped;
+      });
+    }
+
+    return out;
+  });
+}
+
+function makeLevel(config) {
+  const routeLength = config.routeLength;
+  const startX = -routeLength * 0.5;
+  const finishX = routeLength * 0.5;
+  const finishSize = config.finishPadSize ?? 6.0;
+  const spawnPadSize = config.launchPadSize ?? 3.4;
+
+  const segments = mapSegmentPositions(routeLength, config.segments || []);
+  if (!segments.some((s) => s.type === "finishApproach")) {
+    segments.push({
+      type: "finishApproach",
+      x0: finishX - Math.min(12, routeLength * 0.22),
+      x1: finishX
+    });
+  }
 
   return {
-    gravity: Number((8.7 + t * 5.6).toFixed(2)),
-    wind: Number((Math.max(0, idx - 1) * 0.14 + Math.max(0, idx - 8) * 0.08).toFixed(2)),
-
-    // Pads / progression
+    id: config.id,
+    name: config.name,
+    gravity: config.gravity,
     routeLength,
-    launchPadSize: 3.0,
-    landingPadSize,
-
-    // Terrain profile (moon-like and progressively rougher)
-    terrainAmp,
-    terrainRidge: Number((terrainAmp * (idx === 0 ? 0 : 0.55)).toFixed(2)),
-    terrainDetail: Number((idx === 0 ? 0 : 0.16 + t * 0.34).toFixed(2)),
-    terrainFreqX: Number((0.08 + t * 0.1).toFixed(3)),
-    terrainFreqZ: Number((0.07 + t * 0.09).toFixed(3)),
-    terrainDiagFreq: Number((0.05 + t * 0.08).toFixed(3)),
-    craterCount,
-    craterDepth: Number((idx === 0 ? 0 : 0.22 + terrainAmp * 0.48).toFixed(2)),
-    craterRadiusMin: Number((0.9 + (1 - t) * 0.5).toFixed(2)),
-    craterRadiusMax: Number((2.1 + (1 - t) * 1.4).toFixed(2)),
-    craterRim: Number((idx === 0 ? 0 : 0.08 + terrainAmp * 0.12).toFixed(2)),
-    terrainSeed: idx + 1,
-    corridorHalfWidth,
-    corridorFlattenStrength,
-    mountainCount,
-    mountainHeight,
-    mountainIntrusion,
-    mountainRadiusMin: Number((1.4 + (1 - t) * 0.7).toFixed(2)),
-    mountainRadiusMax: Number((2.6 + (1 - t) * 1.2).toFixed(2)),
-    centerSpireCount,
-    centerSpireHeight: Number((idx < 3 ? 0 : 0.9 + idx * 0.42 + Math.max(0, idx - 6) * 0.25).toFixed(2)),
-    centerSpireRadiusMin: Number((0.9 + (1 - t) * 0.45).toFixed(2)),
-    centerSpireRadiusMax: Number((1.8 + (1 - t) * 0.75).toFixed(2)),
-    chasmCount,
-    chasmDepth,
-    chasmWidthX: Number((0.9 + t * 0.7).toFixed(2)),
-    chasmWidthZ: Number((3.4 + t * 2.6).toFixed(2)),
-    tunnelGateCount,
-    tunnelGapWidth,
-    tunnelGapHeight,
-    tunnelDepth: Number((1.9 + t * 1.65 + Math.max(0, idx - 6) * 0.14).toFixed(2)),
-    tunnelFrameThickness: Number((0.55 + t * 0.18).toFixed(2)),
-    terrainMinClamp: Number((-2.8 - Math.max(0, idx - 3) * 0.55 - Math.max(0, idx - 8) * 0.35).toFixed(2)),
-    terrainMaxClamp: Number((4.8 + Math.max(0, idx - 1) * 0.42 + Math.max(0, idx - 6) * 0.28).toFixed(2)),
-    ceilingMargin
+    spawn: { x: startX, y: config.spawnY ?? 1.15, z: config.spawnZ ?? 0 },
+    finishPad: { x: finishX, y: 0.5, z: 0, size: finishSize },
+    launchPad: { x: startX, y: 0.5, z: 0, size: spawnPadSize },
+    camera: smoothCamera(config.camera),
+    corridor: {
+      baseHalfHeight: config.corridorHalfHeight,
+      baseHalfWidth: config.corridorHalfWidth,
+      cutawaySide: "camera"
+    },
+    segments,
+    visualTheme: "dark_sci_fi",
+    difficulty: config.id
   };
-});
+}
+
+export const LEVELS = [
+  makeLevel({
+    id: 1,
+    name: "Straight Run",
+    gravity: 8.8,
+    routeLength: 40,
+    corridorHalfHeight: 4.8,
+    corridorHalfWidth: 5.4,
+    segments: [
+      { type: "straight", n0: 0.00, n1: 0.82 }
+    ]
+  }),
+
+  makeLevel({
+    id: 2,
+    name: "Soft Curve",
+    gravity: 9.0,
+    routeLength: 46,
+    corridorHalfHeight: 4.6,
+    corridorHalfWidth: 4.9,
+    segments: [
+      { type: "curve", n0: 0.12, n1: 0.52, from: 0.0, to: 1.0 },
+      { type: "curve", n0: 0.52, n1: 0.82, from: 1.0, to: 0.2 },
+      { type: "walls", n0: 0.22, n1: 0.72, halfWidth: 4.2 }
+    ]
+  }),
+
+  makeLevel({
+    id: 3,
+    name: "Single Arch",
+    gravity: 9.2,
+    routeLength: 50,
+    corridorHalfHeight: 4.7,
+    corridorHalfWidth: 4.8,
+    segments: [
+      { type: "straight", n0: 0.00, n1: 0.30 },
+      { type: "arch", n0: 0.34, n1: 0.54, drop: 2.3 },
+      { type: "straight", n0: 0.54, n1: 0.82 }
+    ]
+  }),
+
+  makeLevel({
+    id: 4,
+    name: "Curve And Arch",
+    gravity: 9.5,
+    routeLength: 56,
+    corridorHalfHeight: 4.5,
+    corridorHalfWidth: 4.6,
+    segments: [
+      { type: "curve", n0: 0.08, n1: 0.36, from: 0.0, to: 0.8 },
+      { type: "arch", n0: 0.42, n1: 0.60, drop: 2.0 },
+      { type: "curve", n0: 0.56, n1: 0.84, from: 0.8, to: -0.2 },
+      { type: "walls", n0: 0.18, n1: 0.76, halfWidth: 4.0 }
+    ]
+  }),
+
+  makeLevel({
+    id: 5,
+    name: "Dip And Ceiling",
+    gravity: 9.8,
+    routeLength: 64,
+    corridorHalfHeight: 4.3,
+    corridorHalfWidth: 4.4,
+    segments: [
+      { type: "dip", n0: 0.20, n1: 0.42, depth: 1.5 },
+      { type: "arch", n0: 0.45, n1: 0.63, drop: 2.2 },
+      { type: "mound", n0: 0.66, n1: 0.78, height: 0.8 },
+      { type: "walls", n0: 0.28, n1: 0.74, halfWidth: 3.9 }
+    ]
+  }),
+
+  makeLevel({
+    id: 6,
+    name: "Twin Arches",
+    gravity: 10.2,
+    routeLength: 74,
+    corridorHalfHeight: 4.1,
+    corridorHalfWidth: 4.1,
+    segments: [
+      { type: "arch", n0: 0.24, n1: 0.38, drop: 2.2 },
+      { type: "walls", n0: 0.20, n1: 0.62, halfWidth: 3.6 },
+      { type: "arch", n0: 0.46, n1: 0.61, drop: 2.35 },
+      { type: "dip", n0: 0.64, n1: 0.78, depth: 1.0 }
+    ]
+  }),
+
+  makeLevel({
+    id: 7,
+    name: "Bulge And Arch",
+    gravity: 10.8,
+    routeLength: 86,
+    corridorHalfHeight: 3.95,
+    corridorHalfWidth: 3.9,
+    segments: [
+      { type: "mound", n0: 0.22, n1: 0.42, height: 1.35 },
+      { type: "arch", n0: 0.40, n1: 0.57, drop: 2.45 },
+      { type: "walls", n0: 0.28, n1: 0.70, halfWidth: 3.45 },
+      { type: "curve", n0: 0.58, n1: 0.84, from: 0.0, to: 0.7 }
+    ]
+  }),
+
+  makeLevel({
+    id: 8,
+    name: "Interior Rocks",
+    gravity: 11.3,
+    routeLength: 96,
+    corridorHalfHeight: 3.8,
+    corridorHalfWidth: 4.2,
+    camera: { gameplayDepth: 8.0, maxFov: 62 },
+    segments: [
+      { type: "walls", n0: 0.16, n1: 0.82, halfWidth: 3.5 },
+      { type: "arch", n0: 0.30, n1: 0.43, drop: 2.0 },
+      { type: "rocks", n0: 0.34, n1: 0.68, items: [
+        { n: 0.38, y: 2.4, z: -1.8, r: 0.95, sx: 1.2, sy: 1.0, sz: 0.9 },
+        { n: 0.50, y: 1.5, z: -0.8, r: 1.05, sx: 1.0, sy: 1.25, sz: 0.9 },
+        { n: 0.62, y: 3.2, z: -2.1, r: 0.9, sx: 1.0, sy: 0.85, sz: 1.2 }
+      ] }
+    ]
+  }),
+
+  makeLevel({
+    id: 9,
+    name: "Long Gauntlet",
+    gravity: 11.9,
+    routeLength: 112,
+    corridorHalfHeight: 3.65,
+    corridorHalfWidth: 3.85,
+    camera: { gameplayDepth: 8.3, maxFov: 63 },
+    segments: [
+      { type: "curve", n0: 0.08, n1: 0.22, from: 0.0, to: 0.8 },
+      { type: "arch", n0: 0.24, n1: 0.36, drop: 2.25 },
+      { type: "dip", n0: 0.36, n1: 0.48, depth: 1.35 },
+      { type: "walls", n0: 0.20, n1: 0.86, halfWidth: 3.35 },
+      { type: "mound", n0: 0.54, n1: 0.67, height: 1.0 },
+      { type: "arch", n0: 0.68, n1: 0.80, drop: 2.35 },
+      { type: "rocks", n0: 0.40, n1: 0.82, items: [
+        { n: 0.44, y: 2.8, z: -1.4, r: 0.85, sx: 1.1, sy: 0.9, sz: 1.2 },
+        { n: 0.58, y: 1.3, z: -2.0, r: 1.0, sx: 1.2, sy: 1.2, sz: 0.95 },
+        { n: 0.72, y: 2.4, z: -0.7, r: 0.9, sx: 0.9, sy: 1.15, sz: 1.0 }
+      ] }
+    ]
+  }),
+
+  makeLevel({
+    id: 10,
+    name: "Final Run",
+    gravity: 12.4,
+    routeLength: 132,
+    corridorHalfHeight: 3.55,
+    corridorHalfWidth: 3.7,
+    camera: { gameplayDepth: 8.8, maxFov: 64, finishSide: 7.4, finishDepth: 11.2 },
+    segments: [
+      { type: "curve", n0: 0.06, n1: 0.18, from: 0.0, to: 0.9 },
+      { type: "walls", n0: 0.14, n1: 0.90, halfWidth: 3.15 },
+      { type: "arch", n0: 0.20, n1: 0.30, drop: 2.2 },
+      { type: "dip", n0: 0.30, n1: 0.40, depth: 1.4 },
+      { type: "mound", n0: 0.46, n1: 0.56, height: 1.2 },
+      { type: "arch", n0: 0.56, n1: 0.66, drop: 2.45 },
+      { type: "curve", n0: 0.64, n1: 0.76, from: 0.9, to: -0.1 },
+      { type: "rocks", n0: 0.34, n1: 0.88, items: [
+        { n: 0.38, y: 2.7, z: -1.8, r: 0.9, sx: 1.15, sy: 1.0, sz: 0.95 },
+        { n: 0.52, y: 1.4, z: -1.0, r: 1.05, sx: 1.1, sy: 1.25, sz: 1.1 },
+        { n: 0.63, y: 3.0, z: -2.2, r: 0.95, sx: 1.25, sy: 0.9, sz: 1.15 },
+        { n: 0.78, y: 2.1, z: -0.6, r: 0.85, sx: 0.95, sy: 1.1, sz: 0.95 }
+      ] }
+    ]
+  })
+];

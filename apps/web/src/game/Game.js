@@ -220,12 +220,13 @@ export class Game {
       if (this._isFlyingState()) {
         this.physics.apply(this.rocket, this.input, dt);
 
-        // Side-scroller feel: softly recenter depth so the rocket stays readable in a side view.
-        const zVelDrag = Math.exp(-7.0 * dt);
-        const zPosDrag = Math.exp(-3.2 * dt);
+        // Keep depth tightly centered so motion reads as a side scroller.
+        const forwardNorm = clamp(Math.max(0, this.rocket.vel.x) / 12, 0, 1);
+        const zVelDrag = Math.exp(-(10.5 + forwardNorm * 7.5) * dt);
+        const zPosDrag = Math.exp(-(5.8 + forwardNorm * 6.5) * dt);
         this.rocket.vel.z *= zVelDrag;
         this.rocket.pos.z *= zPosDrag;
-        this.rocket.pos.z = clamp(this.rocket.pos.z, -6, 4);
+        this.rocket.pos.z = clamp(this.rocket.pos.z, -2.6, 2.0);
 
         if (this.state === "FLYING_SIDE" && this.rocket.pos.x >= this.world.finishApproachX) {
           this.state = "FINISH_3D";
@@ -340,19 +341,27 @@ export class Game {
     const routeSpan = Math.max(18, this.world.routeEndX - this.world.routeStartX);
     const distToFinish = Math.max(0, this.world.routeEndX - p.x);
     const finishDistNorm = clamp(distToFinish / routeSpan, 0, 1);
-    const speedZoom = clamp(this.rocket.vel.length() / 10, 0, 1);
     const forwardSpeed = Math.max(0, this.rocket.vel.x);
+    const speedZoom = clamp(this.rocket.vel.length() / 10, 0, 1);
+    const cruiseZoom = clamp(forwardSpeed / 12, 0, 1);
     const openZoom = this.world.openSpaceFactorAt ? this.world.openSpaceFactorAt(p.x) : 0;
-    const zoom = clamp(Math.max(speedZoom * 0.75, finishDistNorm * 0.55, openZoom * 0.45), 0, 1);
-    const lookAhead = clamp(4.2 + forwardSpeed * 0.8 + zoom * 3.0, 4.2, 12.5);
+    const zoom = clamp(Math.max(
+      speedZoom * 0.85,
+      cruiseZoom * 1.0,
+      finishDistNorm * 0.55,
+      openZoom * 0.5
+    ), 0, 1);
+    const lookAhead = clamp(6.5 + forwardSpeed * 1.35 + zoom * 4.8, 6.5, 24);
 
-    // Pull back the gameplay camera and bias the target forward so more route is visible.
-    const sideDepth = (camCfg.gameplayDepth ?? 7.2) + 2.0 + zoom * 8.2;
-    const sideHeight = (camCfg.gameplayHeight ?? 2.1) + 0.7 + zoom * 3.4;
-    const sideFov = lerp((camCfg.minFov ?? 48) + 2, (camCfg.maxFov ?? 60) + 6, zoom);
+    // Pull farther back and widen FOV at speed so upcoming terrain stays visible.
+    const sideDepth = (camCfg.gameplayDepth ?? 7.2) + 4.2 + zoom * 9.8 + cruiseZoom * 6.2;
+    const sideHeight = (camCfg.gameplayHeight ?? 2.1) + 1.2 + zoom * 3.8 + cruiseZoom * 1.6;
+    const sideFov = lerp((camCfg.minFov ?? 48) + 5, (camCfg.maxFov ?? 60) + 12, clamp(zoom * 0.9, 0, 1));
+    const camZ = p.z * 0.35;
+    const targetZ = p.z * 0.15;
 
-    this._camA.set(p.x - lookAhead * 0.2, p.y + sideHeight, p.z + sideDepth);
-    this._camB.set(p.x + lookAhead, p.y + 0.82, p.z);
+    this._camA.set(p.x - lookAhead * 0.4, p.y + sideHeight, camZ + sideDepth);
+    this._camB.set(p.x + lookAhead * 1.08, p.y + 0.82, targetZ);
 
     const padPos = this.world.landingPad.position;
     const padTop = this.world.landingPadTopY();
@@ -375,7 +384,8 @@ export class Game {
     this._camPos.copy(this._camA).lerp(this._camC, this._finishCamBlend);
     this._camTarget.copy(this._camB).lerp(this._camD, this._finishCamBlend);
 
-    this.camera.position.lerp(this._camPos, 0.18);
+    const camFollow = clamp(0.14 + cruiseZoom * 0.12, 0.14, 0.28);
+    this.camera.position.lerp(this._camPos, camFollow);
     this.camera.lookAt(this._camTarget.x, this._camTarget.y, this._camTarget.z);
     this.camera.fov = lerp(sideFov, finishFov, this._finishCamBlend);
     this.camera.updateProjectionMatrix();

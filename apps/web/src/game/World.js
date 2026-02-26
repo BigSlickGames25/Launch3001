@@ -44,6 +44,9 @@ export class World {
     this._obstacleMeshes = [];
     this._levelObjects = [];
     this._lightsPulse = [];
+    this._rotatingWorkLights = [];
+    this._teleportFX = [];
+    this._slidingDoors = [];
 
     this._tmpV = new THREE.Vector3();
     this._tmpColor = new THREE.Color();
@@ -56,10 +59,10 @@ export class World {
   }
 
   _setupSceneLighting() {
-    this.hemiLight = new THREE.HemisphereLight(0xa8c9ee, 0x131920, 1.15);
+    this.hemiLight = new THREE.HemisphereLight(0xb8d8f4, 0x1a222b, 1.35);
     this.group.add(this.hemiLight);
 
-    this.sunLight = new THREE.DirectionalLight(0xf2f7ff, 1.65);
+    this.sunLight = new THREE.DirectionalLight(0xf8fbff, 1.95);
     this.sunLight.position.set(16, 20, 14);
     this.sunLight.castShadow = true;
     this.sunLight.shadow.mapSize.set(1536, 1536);
@@ -73,11 +76,11 @@ export class World {
     this.sunLight.shadow.normalBias = 0.02;
     this.group.add(this.sunLight);
 
-    this.fillLight = new THREE.DirectionalLight(0x7fd9ff, 0.7);
+    this.fillLight = new THREE.DirectionalLight(0x8fe2ff, 0.95);
     this.fillLight.position.set(-10, 8, 18);
     this.group.add(this.fillLight);
 
-    this.rimLight = new THREE.PointLight(0x54dfff, 0.5, 90, 2);
+    this.rimLight = new THREE.PointLight(0x54dfff, 0.9, 110, 2);
     this.rimLight.position.set(0, 9, 16);
     this.group.add(this.rimLight);
   }
@@ -309,6 +312,9 @@ export class World {
     this._obstacleMeshes = [];
     this._levelObjects = [];
     this._lightsPulse = [];
+    this._rotatingWorkLights = [];
+    this._teleportFX = [];
+    this._slidingDoors = [];
   }
 
   _disposeObject(obj) {
@@ -357,6 +363,7 @@ export class World {
     this._buildCorridorGeometry();
     this._buildInteriorObstacles();
     this._buildLevelScenery();
+    this._buildWarehouseSetPieces();
 
     const span = Math.max(60, level.routeLength + 36);
     this.farBackdrop.scale.x = span / 420;
@@ -421,8 +428,8 @@ export class World {
       }
     }
 
-    // Lift the ceiling to make the cave feel taller and less like a slot.
-    ceilingY += 0.85;
+    // Raise the roof significantly so the route reads like a larger hangar/cave tunnel volume.
+    ceilingY += 1.65;
 
     // Smoothly flatten and widen around pads for reliable takeoff/landing.
     const flattenAroundPad = (padX, padHalf) => {
@@ -433,13 +440,13 @@ export class World {
       const s = smooth01(t);
       floorY = lerp(floorY, 0, s);
       halfWidth = Math.max(halfWidth, lerp(halfWidth, Math.max(padHalf + 1.2, c.baseHalfWidth || halfWidth), s));
-      ceilingY = Math.max(ceilingY, floorY + Math.max(5.0, (c.baseHalfHeight || 4.6) * 1.9));
+      ceilingY = Math.max(ceilingY, floorY + Math.max(5.8, (c.baseHalfHeight || 4.6) * 2.05));
     };
 
     flattenAroundPad(this.launchPad.position.x, this.launchPadHalf);
     flattenAroundPad(this.landingPad.position.x, this.landingPadHalf);
 
-    const minClear = 3.9;
+    const minClear = 4.8;
     if (ceilingY < floorY + minClear) ceilingY = floorY + minClear;
 
     return { x, floorY, ceilingY, halfWidth };
@@ -476,11 +483,11 @@ export class World {
   }
 
   _buildCorridorGeometry() {
-    const floorMat = new THREE.MeshStandardMaterial({ color: 0x242e38, roughness: 0.96, metalness: 0.05, emissive: 0x05090d, emissiveIntensity: 0.2 });
-    const roofMat = new THREE.MeshStandardMaterial({ color: 0x1e2730, roughness: 0.97, metalness: 0.04, emissive: 0x04070b, emissiveIntensity: 0.16 });
-    const wallMat = new THREE.MeshStandardMaterial({ color: 0x1f2b35, roughness: 0.94, metalness: 0.08, emissive: 0x061019, emissiveIntensity: 0.2 });
-    const lipMat = new THREE.MeshStandardMaterial({ color: 0x2d3b48, roughness: 0.88, metalness: 0.15, emissive: 0x0f1f2d, emissiveIntensity: 0.22 });
-    const shellMat = new THREE.MeshStandardMaterial({ color: 0x202b36, roughness: 0.93, metalness: 0.08, emissive: 0x08121a, emissiveIntensity: 0.2 });
+    const floorMat = new THREE.MeshStandardMaterial({ color: 0x303942, roughness: 0.88, metalness: 0.14, emissive: 0x0a1017, emissiveIntensity: 0.22 });
+    const roofMat = new THREE.MeshStandardMaterial({ color: 0x36414d, roughness: 0.84, metalness: 0.16, emissive: 0x0e141c, emissiveIntensity: 0.2 });
+    const wallMat = new THREE.MeshStandardMaterial({ color: 0x29333d, roughness: 0.86, metalness: 0.16, emissive: 0x0b1219, emissiveIntensity: 0.22 });
+    const lipMat = new THREE.MeshStandardMaterial({ color: 0x4a5663, roughness: 0.74, metalness: 0.22, emissive: 0x131d28, emissiveIntensity: 0.24 });
+    const shellMat = new THREE.MeshStandardMaterial({ color: 0x2e3842, roughness: 0.82, metalness: 0.14, emissive: 0x0b141d, emissiveIntensity: 0.22 });
 
     const xSeg = 240;
     const zSeg = 14;
@@ -492,8 +499,8 @@ export class World {
       const zFront = p.halfWidth * 0.72;
       const z = lerp(zBack, zFront, v);
       const vn = (z - zBack) / Math.max(0.001, zFront - zBack);
-      const edgeLift = Math.pow(Math.abs(vn - 0.5) * 2, 1.35) * 0.24;
-      const noise = (Math.sin(x * 0.16 + z * 0.9) + Math.sin(x * 0.07 - z * 1.3)) * 0.035;
+      const edgeLift = Math.pow(Math.abs(vn - 0.5) * 2, 1.25) * 0.12;
+      const noise = (Math.sin(x * 0.12 + z * 0.7) + Math.sin(x * 0.05 - z * 1.05)) * 0.012;
       return [x, p.floorY + edgeLift + noise, z];
     }, floorMat);
     floorMesh.receiveShadow = true;
@@ -507,8 +514,8 @@ export class World {
       const zFront = p.halfWidth * 0.24; // cutaway: leave camera-side opening but keep more roof mass
       const z = lerp(zBack, zFront, v);
       const vn = (z - zBack) / Math.max(0.001, zFront - zBack);
-      const lipCurve = Math.pow(vn, 1.4) * 0.18;
-      const noise = (Math.sin(x * 0.12 + z * 1.6) + Math.sin(x * 0.21)) * 0.028;
+      const lipCurve = Math.pow(vn, 1.3) * 0.08;
+      const noise = (Math.sin(x * 0.1 + z * 1.0) + Math.sin(x * 0.14)) * 0.01;
       return [x, p.ceilingY + lipCurve + noise, z];
     }, roofMat);
     roofMesh.castShadow = true;
@@ -520,7 +527,7 @@ export class World {
       const x = lerp(this.visualStartX, this.visualEndX, u);
       const p = this._sampleProfile(x);
       const y = lerp(p.floorY - 0.12, p.ceilingY + 0.18, v);
-      const z = -p.halfWidth - 0.16 + Math.sin(y * 0.7 + x * 0.05) * 0.05;
+      const z = -p.halfWidth - 0.16 + Math.sin(y * 0.45 + x * 0.035) * 0.015;
       return [x, y, z];
     }, wallMat);
     backWall.castShadow = true;
@@ -536,7 +543,7 @@ export class World {
       const z1 = p.halfWidth * 0.72;
       const z = lerp(z0, z1, v);
       const t = (z - z0) / Math.max(0.001, z1 - z0);
-      const y = p.ceilingY - 0.08 + t * 0.62 + Math.sin(x * 0.12 + z) * 0.03;
+      const y = p.ceilingY - 0.06 + t * 0.42 + Math.sin(x * 0.08 + z * 0.6) * 0.012;
       return [x, y, z];
     }, lipMat);
     topLip.castShadow = true;
@@ -551,7 +558,7 @@ export class World {
       const z1 = p.halfWidth * 0.78;
       const z = lerp(z0, z1, v);
       const t = (z - z0) / Math.max(0.001, z1 - z0);
-      const y = p.floorY - 0.18 + (1 - t) * 0.4 + Math.sin(x * 0.09 + z * 1.2) * 0.02;
+      const y = p.floorY - 0.14 + (1 - t) * 0.28 + Math.sin(x * 0.08 + z * 0.9) * 0.01;
       return [x, y, z];
     }, lipMat);
     bottomLip.castShadow = true;
@@ -567,7 +574,7 @@ export class World {
       const z1 = p.halfWidth * 1.16;
       const z = lerp(z0, z1, v);
       const t = (z - z0) / Math.max(0.001, z1 - z0);
-      const y = p.ceilingY + 0.18 + t * 1.1 + Math.sin(x * 0.1 + z * 0.9) * 0.05;
+      const y = p.ceilingY + 0.28 + t * 1.28 + Math.sin(x * 0.07 + z * 0.55) * 0.02;
       return [x, y, z];
     }, shellMat);
     upperShell.castShadow = true;
@@ -582,7 +589,7 @@ export class World {
       const z1 = p.halfWidth * 1.2;
       const z = lerp(z0, z1, v);
       const t = (z - z0) / Math.max(0.001, z1 - z0);
-      const y = p.floorY - 0.45 + (1 - t) * 0.9 + Math.sin(x * 0.08 + z * 1.1) * 0.04;
+      const y = p.floorY - 0.5 + (1 - t) * 0.95 + Math.sin(x * 0.07 + z * 0.7) * 0.018;
       return [x, y, z];
     }, shellMat);
     lowerShell.castShadow = true;
@@ -597,7 +604,7 @@ export class World {
       const y1 = p.ceilingY + 1.25;
       const y = lerp(y0, y1, v);
       const bulge = Math.pow(v, 1.2);
-      const z = p.halfWidth * (0.94 + bulge * 0.26) + Math.sin(x * 0.09 + y * 0.5) * 0.03;
+      const z = p.halfWidth * (0.94 + bulge * 0.24) + Math.sin(x * 0.06 + y * 0.35) * 0.014;
       return [x, y, z];
     }, shellMat);
     upperOuterFace.castShadow = true;
@@ -612,7 +619,7 @@ export class World {
       const y1 = p.floorY + 0.25;
       const y = lerp(y0, y1, v);
       const bulge = 1 - Math.pow(1 - v, 1.25);
-      const z = p.halfWidth * (0.96 + bulge * 0.24) + Math.sin(x * 0.1 + y * 0.7) * 0.03;
+      const z = p.halfWidth * (0.97 + bulge * 0.22) + Math.sin(x * 0.07 + y * 0.4) * 0.014;
       return [x, y, z];
     }, shellMat);
     lowerOuterFace.castShadow = true;
@@ -707,6 +714,135 @@ export class World {
         });
       }
     }
+
+    this._buildWarehouseGrateObstacles();
+  }
+
+  _buildWarehouseGrateObstacles() {
+    const routeLen = Math.max(24, this.routeEndX - this.routeStartX);
+    const count = Math.max(2, Math.min(6, Math.round(routeLen / 26)));
+    if (count <= 0) return;
+
+    const frameMat = new THREE.MeshStandardMaterial({
+      color: 0x303a45,
+      roughness: 0.72,
+      metalness: 0.48,
+      emissive: 0x0a1018,
+      emissiveIntensity: 0.16
+    });
+    const grateMat = new THREE.MeshStandardMaterial({
+      color: 0x5f6f7f,
+      roughness: 0.55,
+      metalness: 0.62,
+      emissive: 0x0b1722,
+      emissiveIntensity: 0.12
+    });
+    const warningMat = new THREE.MeshStandardMaterial({
+      color: 0xffa93f,
+      roughness: 0.42,
+      metalness: 0.34,
+      emissive: 0x572a04,
+      emissiveIntensity: 0.4
+    });
+
+    for (let i = 0; i < count; i++) {
+      const t = (i + 1) / (count + 1);
+      let x = lerp(this.routeStartX + 8, this.routeEndX - 10, t);
+      x += (hash1(i * 9.3 + routeLen * 0.07) - 0.5) * 3.8;
+      if (x < this.routeStartX + 7) x = this.routeStartX + 7;
+      if (x > this.routeEndX - 7) x = this.routeEndX - 7;
+
+      const p = this._sampleProfile(x);
+      const fromCeiling = (i % 2) === 0;
+      const zCenter = clamp((hash1(x * 0.11 + i) - 0.5) * 0.45, -0.28, 0.28);
+      const zHalf = Math.min(1.15, Math.max(0.7, p.halfWidth * 0.26));
+      const xThickness = 0.16;
+
+      const floorY = p.floorY;
+      const ceilY = p.ceilingY;
+      const safeGap = clamp(2.2 + hash1(x * 0.21 + 3.1) * 0.6, 2.2, 2.8);
+      const edgeMargin = 0.8;
+
+      let y0;
+      let y1;
+      if (fromCeiling) {
+        y1 = ceilY - 0.22;
+        y0 = Math.min(y1 - 0.7, floorY + safeGap + hash1(x * 0.41 + 1.7) * 0.55);
+        y0 = clamp(y0, floorY + 1.65, ceilY - 1.15);
+      } else {
+        y0 = floorY + 0.2;
+        y1 = Math.max(y0 + 0.7, ceilY - (safeGap + hash1(x * 0.37 + 5.2) * 0.55));
+        y1 = clamp(y1, floorY + 1.2, ceilY - edgeMargin);
+      }
+
+      const barSpan = Math.max(0.7, y1 - y0);
+      const group = new THREE.Group();
+      group.position.set(x, 0, zCenter);
+
+      // Frame rails
+      const topRail = new THREE.Mesh(new THREE.BoxGeometry(xThickness, 0.09, zHalf * 2 + 0.18), frameMat);
+      topRail.position.set(0, y1, 0);
+      topRail.castShadow = true;
+      topRail.receiveShadow = true;
+      group.add(topRail);
+
+      const bottomRail = new THREE.Mesh(new THREE.BoxGeometry(xThickness, 0.09, zHalf * 2 + 0.18), frameMat);
+      bottomRail.position.set(0, y0, 0);
+      bottomRail.castShadow = true;
+      bottomRail.receiveShadow = true;
+      group.add(bottomRail);
+
+      const sidePostGeom = new THREE.BoxGeometry(xThickness, barSpan + 0.16, 0.08);
+      for (const zSide of [-zHalf, zHalf]) {
+        const post = new THREE.Mesh(sidePostGeom, frameMat);
+        post.position.set(0, (y0 + y1) * 0.5, zSide);
+        post.castShadow = true;
+        post.receiveShadow = true;
+        group.add(post);
+
+        const warn = new THREE.Mesh(new THREE.BoxGeometry(xThickness + 0.01, 0.03, 0.1), warningMat);
+        warn.position.set(0, y1 - 0.08, zSide);
+        warn.castShadow = false;
+        group.add(warn);
+      }
+
+      // Grate bars across the opening.
+      const bars = 6;
+      for (let b = 0; b < bars; b++) {
+        const f = b / (bars - 1);
+        const z = lerp(-zHalf * 0.92, zHalf * 0.92, f);
+        const bar = new THREE.Mesh(new THREE.BoxGeometry(0.055, barSpan, 0.03), grateMat);
+        bar.position.set(0, (y0 + y1) * 0.5, z);
+        bar.castShadow = true;
+        bar.receiveShadow = true;
+        group.add(bar);
+
+        // Collision samples along each bar.
+        const samples = 4;
+        for (let s = 0; s < samples; s++) {
+          const yf = (s + 0.5) / samples;
+          this._obstacleColliders.push({
+            center: new THREE.Vector3(x, lerp(y0, y1, yf), zCenter + z),
+            radius: 0.15
+          });
+        }
+      }
+
+      // Horizontal slats to make it read like a grate/gate.
+      const slats = 3;
+      for (let s = 0; s < slats; s++) {
+        const yf = (s + 1) / (slats + 1);
+        const y = lerp(y0, y1, yf);
+        const slat = new THREE.Mesh(new THREE.BoxGeometry(0.045, 0.035, zHalf * 2 - 0.12), grateMat);
+        slat.position.set(0, y, 0);
+        slat.castShadow = true;
+        slat.receiveShadow = true;
+        group.add(slat);
+      }
+
+      this.obstacleGroup.add(group);
+      this._obstacleMeshes.push(group);
+    }
   }
 
   _buildLevelScenery() {
@@ -725,6 +861,323 @@ export class World {
       const strip = new THREE.Mesh(guideGeom, guideMat);
       strip.position.set(x, y, z);
       this.fxGroup.add(strip);
+    }
+  }
+
+  _buildWarehouseSetPieces() {
+    // Hide the exterior mountain/star look and replace it with an indoor warehouse vibe.
+    if (this.starField) this.starField.visible = false;
+    if (this.ridgeNear) this.ridgeNear.visible = false;
+    if (this.ridgeFar) this.ridgeFar.visible = false;
+    if (this.hazePlane?.material) this.hazePlane.material.opacity = 0.08;
+
+    const routeLen = Math.max(24, this.routeEndX - this.routeStartX);
+    const ribMat = new THREE.MeshStandardMaterial({
+      color: 0x36414d,
+      roughness: 0.68,
+      metalness: 0.46,
+      emissive: 0x0f141b,
+      emissiveIntensity: 0.18
+    });
+    const beamMat = new THREE.MeshStandardMaterial({
+      color: 0x4d5966,
+      roughness: 0.62,
+      metalness: 0.5,
+      emissive: 0x141a22,
+      emissiveIntensity: 0.16
+    });
+    const panelMat = new THREE.MeshStandardMaterial({
+      color: 0x222a33,
+      roughness: 0.76,
+      metalness: 0.28,
+      emissive: 0x0b1017,
+      emissiveIntensity: 0.14
+    });
+    const hazardMat = new THREE.MeshStandardMaterial({
+      color: 0xffa531,
+      roughness: 0.42,
+      metalness: 0.34,
+      emissive: 0x612f07,
+      emissiveIntensity: 0.42
+    });
+    const teleMat = new THREE.MeshStandardMaterial({
+      color: 0x6deaff,
+      roughness: 0.16,
+      metalness: 0.25,
+      emissive: 0x1aa8d7,
+      emissiveIntensity: 1.0
+    });
+
+    // Warehouse wall panels behind the route to sell the indoor hangar.
+    const wallSpan = routeLen + 18;
+    const wallCenterX = (this.routeStartX + this.routeEndX) * 0.5;
+    const wallHeight = 24;
+    const wallZ = -10.5;
+    const backWall = new THREE.Mesh(
+      new THREE.PlaneGeometry(wallSpan, wallHeight, Math.max(6, Math.round(routeLen / 8)), 3),
+      panelMat
+    );
+    backWall.position.set(wallCenterX, wallHeight * 0.5 - 1.2, wallZ);
+    backWall.receiveShadow = true;
+    this.fxGroup.add(backWall);
+
+    // Structural ribs / trusses along the route.
+    const ribStep = 7.5;
+    for (let x = this.routeStartX + 2; x <= this.routeEndX - 1; x += ribStep) {
+      const p = this._sampleProfile(x);
+      const yTop = p.ceilingY + 0.2;
+      const yBottom = p.floorY - 0.35;
+      const zBack = -p.halfWidth - 0.25;
+      const zFront = p.halfWidth * 0.95;
+      const zSpan = Math.max(1.2, zFront - zBack);
+
+      const rib = new THREE.Group();
+      rib.position.set(x, 0, 0);
+
+      const topBeam = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.16, zSpan + 0.4), beamMat);
+      topBeam.position.set(0, yTop, (zBack + zFront) * 0.5);
+      topBeam.castShadow = true;
+      topBeam.receiveShadow = true;
+      rib.add(topBeam);
+
+      const backPost = new THREE.Mesh(new THREE.BoxGeometry(0.18, yTop - yBottom + 0.24, 0.16), ribMat);
+      backPost.position.set(0, (yTop + yBottom) * 0.5, zBack);
+      backPost.castShadow = true;
+      backPost.receiveShadow = true;
+      rib.add(backPost);
+
+      const frontPost = new THREE.Mesh(new THREE.BoxGeometry(0.16, Math.max(1.1, (yTop - yBottom) * 0.58), 0.14), ribMat);
+      frontPost.position.set(0, yBottom + (yTop - yBottom) * 0.29, zFront);
+      frontPost.castShadow = true;
+      frontPost.receiveShadow = true;
+      rib.add(frontPost);
+
+      const floorRail = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.08, zSpan * 0.82), beamMat);
+      floorRail.position.set(0, yBottom + 0.18, lerp(zBack, zFront, 0.45));
+      floorRail.castShadow = true;
+      floorRail.receiveShadow = true;
+      rib.add(floorRail);
+
+      // Ceiling lamps on alternating ribs.
+      if (Math.round((x - this.routeStartX) / ribStep) % 2 === 0) {
+        const lamp = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.06, 0.7), teleMat);
+        lamp.position.set(0, yTop - 0.18, lerp(zBack, zFront, 0.42));
+        lamp.castShadow = false;
+        rib.add(lamp);
+      }
+
+      this.fxGroup.add(rib);
+    }
+
+    // Rotating orange work lights.
+    const workLightCount = Math.max(3, Math.min(7, Math.round(routeLen / 20)));
+    for (let i = 0; i < workLightCount; i++) {
+      const t = (i + 0.5) / workLightCount;
+      const x = lerp(this.routeStartX + 4, this.routeEndX - 6, t);
+      const p = this._sampleProfile(x);
+      const rig = new THREE.Group();
+      rig.position.set(x, p.ceilingY - 0.35, p.halfWidth * 0.78);
+
+      const pivot = new THREE.Group();
+      rig.add(pivot);
+
+      const arm = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.12, 0.8), ribMat);
+      arm.position.set(0, 0, 0.34);
+      arm.castShadow = true;
+      arm.receiveShadow = true;
+      rig.add(arm);
+
+      const head = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.14, 0.28, 12), beamMat);
+      head.rotation.z = Math.PI / 2;
+      head.position.set(0.22, 0, 0);
+      head.castShadow = true;
+      head.receiveShadow = true;
+      pivot.add(head);
+
+      const lens = new THREE.Mesh(new THREE.CircleGeometry(0.1, 16), hazardMat);
+      lens.rotation.y = -Math.PI / 2;
+      lens.position.set(0.35, 0, 0);
+      lens.castShadow = false;
+      pivot.add(lens);
+
+      const beamCone = new THREE.Mesh(
+        new THREE.ConeGeometry(0.55, 2.6, 18, 1, true),
+        new THREE.MeshBasicMaterial({
+          color: 0xffa23c,
+          transparent: true,
+          opacity: 0.11,
+          depthWrite: false,
+          blending: THREE.AdditiveBlending,
+          side: THREE.DoubleSide
+        })
+      );
+      beamCone.rotation.z = -Math.PI / 2;
+      beamCone.position.set(1.55, 0, 0);
+      pivot.add(beamCone);
+
+      const target = new THREE.Object3D();
+      target.position.set(6, -2.4, -1.8);
+      pivot.add(target);
+
+      const spot = new THREE.SpotLight(0xff9b31, 2.8, 26, Math.PI / 7, 0.5, 1.1);
+      spot.position.set(0.35, 0, 0);
+      spot.castShadow = false;
+      spot.target = target;
+      pivot.add(spot);
+      pivot.add(spot.target);
+
+      this.fxGroup.add(rig);
+      this._rotatingWorkLights.push({
+        rig,
+        pivot,
+        beamCone,
+        spot,
+        phase: hash1(i * 2.13 + routeLen * 0.1) * Math.PI * 2,
+        yawBase: -1.7 + hash1(i * 4.1) * 0.35,
+        sweep: 0.55 + hash1(i * 5.7) * 0.3,
+        speed: 0.85 + hash1(i * 8.1) * 0.65
+      });
+    }
+
+    // Teleport pads at start and finish.
+    const makeTeleport = (x, y, z, hue = "cyan") => {
+      const group = new THREE.Group();
+      group.position.set(x, y, z);
+
+      const colorMain = hue === "orange" ? 0xffa53d : 0x72f0ff;
+      const colorAccent = hue === "orange" ? 0xffd06a : 0x90a7ff;
+
+      const baseRing = new THREE.Mesh(
+        new THREE.TorusGeometry(0.95, 0.05, 12, 42),
+        new THREE.MeshStandardMaterial({
+          color: colorMain,
+          emissive: colorMain,
+          emissiveIntensity: 0.5,
+          roughness: 0.25,
+          metalness: 0.35
+        })
+      );
+      baseRing.rotation.x = Math.PI / 2;
+      group.add(baseRing);
+
+      const spinRingA = new THREE.Mesh(
+        new THREE.TorusGeometry(0.78, 0.028, 10, 36),
+        new THREE.MeshBasicMaterial({ color: colorAccent, transparent: true, opacity: 0.55 })
+      );
+      spinRingA.rotation.set(Math.PI / 2, 0, 0);
+      group.add(spinRingA);
+
+      const spinRingB = new THREE.Mesh(
+        new THREE.TorusGeometry(1.08, 0.02, 10, 36),
+        new THREE.MeshBasicMaterial({ color: colorMain, transparent: true, opacity: 0.36 })
+      );
+      spinRingB.rotation.set(Math.PI / 2, 0, Math.PI / 4);
+      group.add(spinRingB);
+
+      const beam = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.22, 0.4, 2.8, 18, 1, true),
+        new THREE.MeshBasicMaterial({
+          color: colorMain,
+          transparent: true,
+          opacity: 0.18,
+          blending: THREE.AdditiveBlending,
+          depthWrite: false,
+          side: THREE.DoubleSide
+        })
+      );
+      beam.position.y = 1.4;
+      group.add(beam);
+
+      const glow = new THREE.PointLight(colorMain, 1.3, 12, 2);
+      glow.position.y = 0.6;
+      group.add(glow);
+
+      this.fxGroup.add(group);
+      this._teleportFX.push({
+        group,
+        spinRingA,
+        spinRingB,
+        beam,
+        glow,
+        phase: hash1(x * 0.17 + z * 0.21) * Math.PI * 2
+      });
+    };
+
+    makeTeleport(this.launchPad.position.x - 1.25, this.launchPadTopY() + 0.04, this.launchPad.position.z + 1.45, "cyan");
+    makeTeleport(this.landingPad.position.x + 1.45, this.landingPadTopY() + 0.04, this.landingPad.position.z + 1.65, "orange");
+
+    // Animated sliding hangar door near the landing chamber (decorative but highly visible).
+    {
+      const doorX = this.routeEndX - Math.min(5.4, routeLen * 0.1);
+      const p = this._sampleProfile(doorX);
+      const zBack = -p.halfWidth - 0.2;
+      const yBottom = p.floorY + 0.15;
+      const yTop = p.ceilingY - 0.35;
+      const height = Math.max(3.8, yTop - yBottom);
+      const width = Math.max(5.8, Math.min(8.5, routeLen * 0.12));
+      const frameDepth = 0.18;
+
+      const frame = new THREE.Group();
+      frame.position.set(doorX, 0, zBack);
+
+      const jambMat = beamMat;
+      const doorPanelMat = new THREE.MeshStandardMaterial({
+        color: 0x3c4652,
+        roughness: 0.58,
+        metalness: 0.52,
+        emissive: 0x121923,
+        emissiveIntensity: 0.16
+      });
+
+      const lintel = new THREE.Mesh(new THREE.BoxGeometry(width + 0.3, 0.2, frameDepth), jambMat);
+      lintel.position.set(0, yBottom + height + 0.1, 0);
+      lintel.castShadow = true;
+      lintel.receiveShadow = true;
+      frame.add(lintel);
+
+      for (const sx of [-1, 1]) {
+        const jamb = new THREE.Mesh(new THREE.BoxGeometry(0.22, height + 0.2, frameDepth), jambMat);
+        jamb.position.set(sx * (width * 0.5 + 0.05), yBottom + height * 0.5, 0);
+        jamb.castShadow = true;
+        jamb.receiveShadow = true;
+        frame.add(jamb);
+      }
+
+      const backPlate = new THREE.Mesh(new THREE.PlaneGeometry(width, height), panelMat);
+      backPlate.position.set(0, yBottom + height * 0.5, -0.03);
+      frame.add(backPlate);
+
+      const panelW = width * 0.5 - 0.08;
+      const leftPanel = new THREE.Mesh(new THREE.BoxGeometry(panelW, height - 0.08, 0.12), doorPanelMat);
+      const rightPanel = leftPanel.clone();
+      leftPanel.position.set(-panelW * 0.5, yBottom + height * 0.5, 0.01);
+      rightPanel.position.set(panelW * 0.5, yBottom + height * 0.5, 0.01);
+      leftPanel.castShadow = true;
+      leftPanel.receiveShadow = true;
+      rightPanel.castShadow = true;
+      rightPanel.receiveShadow = true;
+      frame.add(leftPanel);
+      frame.add(rightPanel);
+
+      const stripGeom = new THREE.BoxGeometry(panelW * 0.82, 0.035, 0.03);
+      for (const panel of [leftPanel, rightPanel]) {
+        for (let s = 0; s < 4; s++) {
+          const strip = new THREE.Mesh(stripGeom, hazardMat);
+          strip.position.set(0, -height * 0.28 + s * (height * 0.18), 0.08);
+          panel.add(strip);
+        }
+      }
+
+      this.fxGroup.add(frame);
+      this._slidingDoors.push({
+        x: doorX,
+        leftPanel,
+        rightPanel,
+        leftClosedX: leftPanel.position.x,
+        rightClosedX: rightPanel.position.x,
+        travel: width * 0.28,
+        phase: hash1(routeLen * 0.5) * Math.PI * 2
+      });
     }
   }
 
@@ -792,10 +1245,38 @@ export class World {
     }
 
     this.starField.rotation.y += dt * 0.01;
-    this.hazePlane.material.opacity = 0.16 + Math.sin(this._time * 0.32) * 0.02;
+    const hazeBase = this.starField.visible ? 0.16 : 0.08;
+    this.hazePlane.material.opacity = hazeBase + Math.sin(this._time * 0.32) * (this.starField.visible ? 0.02 : 0.01);
 
     for (const p of this._lightsPulse) {
       p.light.intensity = p.base + Math.sin(this._time * p.speed) * p.amp;
+    }
+
+    for (const fx of this._teleportFX) {
+      const pulse = 0.65 + 0.35 * Math.sin(this._time * 2.6 + fx.phase);
+      fx.group.rotation.y += dt * 0.4;
+      fx.spinRingA.rotation.z += dt * (1.8 + pulse * 0.8);
+      fx.spinRingB.rotation.z -= dt * (1.1 + pulse * 0.5);
+      fx.beam.scale.y = 0.9 + pulse * 0.25;
+      fx.beam.position.y = 1.25 + pulse * 0.2;
+      fx.beam.material.opacity = 0.1 + pulse * 0.16;
+      fx.glow.intensity = 0.9 + pulse * 0.9;
+    }
+
+    for (const rig of this._rotatingWorkLights) {
+      const sweep = Math.sin(this._time * rig.speed + rig.phase);
+      rig.pivot.rotation.y = rig.yawBase + sweep * rig.sweep;
+      rig.pivot.rotation.z = -0.04 + Math.sin(this._time * rig.speed * 0.8 + rig.phase * 0.7) * 0.07;
+      rig.spot.intensity = 2.1 + (0.5 + 0.5 * Math.sin(this._time * 2.8 + rig.phase)) * 1.1;
+      rig.beamCone.material.opacity = 0.07 + (0.5 + 0.5 * Math.sin(this._time * 3.2 + rig.phase)) * 0.08;
+    }
+
+    for (const door of this._slidingDoors) {
+      const near = focus ? clamp(1 - Math.abs(focus.x - door.x) / 10, 0, 1) : 0;
+      const idlePulse = 0.08 + (0.5 + 0.5 * Math.sin(this._time * 0.55 + door.phase)) * 0.06;
+      const openAmt = clamp(Math.max(idlePulse, near), 0, 1);
+      door.leftPanel.position.x = door.leftClosedX - openAmt * door.travel;
+      door.rightPanel.position.x = door.rightClosedX + openAmt * door.travel;
     }
   }
 }

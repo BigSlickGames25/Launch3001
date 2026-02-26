@@ -421,6 +421,9 @@ export class World {
       }
     }
 
+    // Lift the ceiling to make the cave feel taller and less like a slot.
+    ceilingY += 0.85;
+
     // Smoothly flatten and widen around pads for reliable takeoff/landing.
     const flattenAroundPad = (padX, padHalf) => {
       const influence = padHalf + 2.2;
@@ -430,13 +433,13 @@ export class World {
       const s = smooth01(t);
       floorY = lerp(floorY, 0, s);
       halfWidth = Math.max(halfWidth, lerp(halfWidth, Math.max(padHalf + 1.2, c.baseHalfWidth || halfWidth), s));
-      ceilingY = Math.max(ceilingY, floorY + Math.max(4.2, (c.baseHalfHeight || 4.6) * 1.7));
+      ceilingY = Math.max(ceilingY, floorY + Math.max(5.0, (c.baseHalfHeight || 4.6) * 1.9));
     };
 
     flattenAroundPad(this.launchPad.position.x, this.launchPadHalf);
     flattenAroundPad(this.landingPad.position.x, this.landingPadHalf);
 
-    const minClear = 2.95;
+    const minClear = 3.9;
     if (ceilingY < floorY + minClear) ceilingY = floorY + minClear;
 
     return { x, floorY, ceilingY, halfWidth };
@@ -477,6 +480,7 @@ export class World {
     const roofMat = new THREE.MeshStandardMaterial({ color: 0x1e2730, roughness: 0.97, metalness: 0.04, emissive: 0x04070b, emissiveIntensity: 0.16 });
     const wallMat = new THREE.MeshStandardMaterial({ color: 0x1f2b35, roughness: 0.94, metalness: 0.08, emissive: 0x061019, emissiveIntensity: 0.2 });
     const lipMat = new THREE.MeshStandardMaterial({ color: 0x2d3b48, roughness: 0.88, metalness: 0.15, emissive: 0x0f1f2d, emissiveIntensity: 0.22 });
+    const shellMat = new THREE.MeshStandardMaterial({ color: 0x202b36, roughness: 0.93, metalness: 0.08, emissive: 0x08121a, emissiveIntensity: 0.2 });
 
     const xSeg = 240;
     const zSeg = 14;
@@ -500,7 +504,7 @@ export class World {
       const x = lerp(this.visualStartX, this.visualEndX, u);
       const p = this._sampleProfile(x);
       const zBack = -p.halfWidth;
-      const zFront = p.halfWidth * 0.12; // cutaway: do not extend full roof to camera side
+      const zFront = p.halfWidth * 0.24; // cutaway: leave camera-side opening but keep more roof mass
       const z = lerp(zBack, zFront, v);
       const vn = (z - zBack) / Math.max(0.001, zFront - zBack);
       const lipCurve = Math.pow(vn, 1.4) * 0.18;
@@ -528,11 +532,11 @@ export class World {
     const topLip = this._makeSurfaceMesh(xSeg, 4, (u, v) => {
       const x = lerp(this.visualStartX, this.visualEndX, u);
       const p = this._sampleProfile(x);
-      const z0 = p.halfWidth * 0.12;
-      const z1 = p.halfWidth * 0.56;
+      const z0 = p.halfWidth * 0.20;
+      const z1 = p.halfWidth * 0.72;
       const z = lerp(z0, z1, v);
       const t = (z - z0) / Math.max(0.001, z1 - z0);
-      const y = p.ceilingY - 0.06 + t * 0.38 + Math.sin(x * 0.12 + z) * 0.02;
+      const y = p.ceilingY - 0.08 + t * 0.62 + Math.sin(x * 0.12 + z) * 0.03;
       return [x, y, z];
     }, lipMat);
     topLip.castShadow = true;
@@ -543,17 +547,78 @@ export class World {
     const bottomLip = this._makeSurfaceMesh(xSeg, 4, (u, v) => {
       const x = lerp(this.visualStartX, this.visualEndX, u);
       const p = this._sampleProfile(x);
-      const z0 = p.halfWidth * 0.20;
-      const z1 = p.halfWidth * 0.64;
+      const z0 = p.halfWidth * 0.24;
+      const z1 = p.halfWidth * 0.78;
       const z = lerp(z0, z1, v);
       const t = (z - z0) / Math.max(0.001, z1 - z0);
-      const y = p.floorY - 0.12 + (1 - t) * 0.22 + Math.sin(x * 0.09 + z * 1.2) * 0.018;
+      const y = p.floorY - 0.18 + (1 - t) * 0.4 + Math.sin(x * 0.09 + z * 1.2) * 0.02;
       return [x, y, z];
     }, lipMat);
     bottomLip.castShadow = true;
     bottomLip.receiveShadow = true;
     this.corridorGroup.add(bottomLip);
     this._levelObjects.push(bottomLip);
+
+    // Build out the camera-side cave shell so the opening reads like a tunnel mouth, not a thin lane.
+    const upperShell = this._makeSurfaceMesh(xSeg, 6, (u, v) => {
+      const x = lerp(this.visualStartX, this.visualEndX, u);
+      const p = this._sampleProfile(x);
+      const z0 = p.halfWidth * 0.62;
+      const z1 = p.halfWidth * 1.16;
+      const z = lerp(z0, z1, v);
+      const t = (z - z0) / Math.max(0.001, z1 - z0);
+      const y = p.ceilingY + 0.18 + t * 1.1 + Math.sin(x * 0.1 + z * 0.9) * 0.05;
+      return [x, y, z];
+    }, shellMat);
+    upperShell.castShadow = true;
+    upperShell.receiveShadow = true;
+    this.corridorGroup.add(upperShell);
+    this._levelObjects.push(upperShell);
+
+    const lowerShell = this._makeSurfaceMesh(xSeg, 6, (u, v) => {
+      const x = lerp(this.visualStartX, this.visualEndX, u);
+      const p = this._sampleProfile(x);
+      const z0 = p.halfWidth * 0.66;
+      const z1 = p.halfWidth * 1.2;
+      const z = lerp(z0, z1, v);
+      const t = (z - z0) / Math.max(0.001, z1 - z0);
+      const y = p.floorY - 0.45 + (1 - t) * 0.9 + Math.sin(x * 0.08 + z * 1.1) * 0.04;
+      return [x, y, z];
+    }, shellMat);
+    lowerShell.castShadow = true;
+    lowerShell.receiveShadow = true;
+    this.corridorGroup.add(lowerShell);
+    this._levelObjects.push(lowerShell);
+
+    const upperOuterFace = this._makeSurfaceMesh(xSeg, 6, (u, v) => {
+      const x = lerp(this.visualStartX, this.visualEndX, u);
+      const p = this._sampleProfile(x);
+      const y0 = p.ceilingY + 0.05;
+      const y1 = p.ceilingY + 1.25;
+      const y = lerp(y0, y1, v);
+      const bulge = Math.pow(v, 1.2);
+      const z = p.halfWidth * (0.94 + bulge * 0.26) + Math.sin(x * 0.09 + y * 0.5) * 0.03;
+      return [x, y, z];
+    }, shellMat);
+    upperOuterFace.castShadow = true;
+    upperOuterFace.receiveShadow = true;
+    this.corridorGroup.add(upperOuterFace);
+    this._levelObjects.push(upperOuterFace);
+
+    const lowerOuterFace = this._makeSurfaceMesh(xSeg, 6, (u, v) => {
+      const x = lerp(this.visualStartX, this.visualEndX, u);
+      const p = this._sampleProfile(x);
+      const y0 = p.floorY - 0.55;
+      const y1 = p.floorY + 0.25;
+      const y = lerp(y0, y1, v);
+      const bulge = 1 - Math.pow(1 - v, 1.25);
+      const z = p.halfWidth * (0.96 + bulge * 0.24) + Math.sin(x * 0.1 + y * 0.7) * 0.03;
+      return [x, y, z];
+    }, shellMat);
+    lowerOuterFace.castShadow = true;
+    lowerOuterFace.receiveShadow = true;
+    this.corridorGroup.add(lowerOuterFace);
+    this._levelObjects.push(lowerOuterFace);
   }
 
   _makeSurfaceMesh(xSeg, ySeg, pointFn, material) {
@@ -650,7 +715,6 @@ export class World {
     const xMax = this.visualEndX;
     const count = Math.max(16, Math.round(routeLen / 5));
 
-    const sideMatNear = new THREE.MeshStandardMaterial({ color: 0x171d25, roughness: 0.94, metalness: 0.08, emissive: 0x06080b, emissiveIntensity: 0.08 });
     const sideMatFar = new THREE.MeshStandardMaterial({ color: 0x121720, roughness: 0.96, metalness: 0.04, emissive: 0x05070a, emissiveIntensity: 0.06 });
 
     for (let i = 0; i < count; i++) {
@@ -666,13 +730,7 @@ export class World {
       leftRim.receiveShadow = true;
       this.fxGroup.add(leftRim);
 
-      if (i % 2 === 0) {
-        const rightRim = new THREE.Mesh(new THREE.BoxGeometry(w * 0.85, h * 0.8, 1.5 + hash1(x * 0.23) * 2.0), sideMatNear);
-        rightRim.position.set(x, p.floorY + h * 0.4, p.halfWidth * 0.8 + 2.2 + hash1(x * 0.07) * 2.0);
-        rightRim.castShadow = true;
-        rightRim.receiveShadow = true;
-        this.fxGroup.add(rightRim);
-      }
+      // Keep the camera-side view clear; tunnel shell geometry handles foreground shape now.
     }
 
     // Subtle sci-fi guide lights along the back wall.

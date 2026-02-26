@@ -56,6 +56,7 @@ export class Game {
     this._camFovSm = 60;
     this._camSideZSm = 0;
     this._camTargetZSm = 0;
+    this._frameDt = 1 / 60;
     this._queuedTimer = 0;
     this._queuedAction = null;
     this._wasPaused = false;
@@ -175,6 +176,7 @@ export class Game {
     this._camLookAheadSm = 9;
     this._camSideZSm = 0;
     this._camTargetZSm = 0;
+    this._camLookAt.set(this.rocket.pos.x + 8, this.rocket.pos.y + 0.8, 0);
     this._clearQueuedAction();
   }
 
@@ -211,6 +213,7 @@ export class Game {
   }
 
   update(dt) {
+    this._frameDt = dt;
     this.input.update(dt);
 
     const paused = this.ui.isMenuOpen?.() ?? false;
@@ -274,7 +277,7 @@ export class Game {
       }
 
       const finishTarget = (this.state === "FINISH_3D" || this.state === "LANDED" || this.state === "LEVEL_TRANSITION") ? 1 : 0;
-      this._finishCamBlend = smooth(this._finishCamBlend, finishTarget, 6.4, dt);
+      this._finishCamBlend = smooth(this._finishCamBlend, finishTarget, 4.4, dt);
     }
 
     this.world.update(dt, this.rocket.pos);
@@ -344,6 +347,7 @@ export class Game {
   }
 
   render() {
+    const camDt = clamp(this._frameDt || (1 / 60), 1 / 240, 1 / 20);
     const p = this.rocket.pos;
     const level = LEVELS[this.levelIndex] || LEVELS[0];
     const camCfg = level?.camera || {};
@@ -361,12 +365,12 @@ export class Game {
     const targetZTarget = p.z * 0.05;
 
     // Smooth the gameplay camera tuning to avoid speed/FOV pumping nausea.
-    this._camLookAheadSm = lerp(this._camLookAheadSm, lookAheadTarget, 0.08);
-    this._camSideDepthSm = lerp(this._camSideDepthSm, sideDepthTarget, 0.08);
-    this._camSideHeightSm = lerp(this._camSideHeightSm, sideHeightTarget, 0.08);
-    this._camFovSm = lerp(this._camFovSm, sideFovTarget, 0.07);
-    this._camSideZSm = lerp(this._camSideZSm, sideZTarget, 0.12);
-    this._camTargetZSm = lerp(this._camTargetZSm, targetZTarget, 0.12);
+    this._camLookAheadSm = smooth(this._camLookAheadSm, lookAheadTarget, 5.4, camDt);
+    this._camSideDepthSm = smooth(this._camSideDepthSm, sideDepthTarget, 4.8, camDt);
+    this._camSideHeightSm = smooth(this._camSideHeightSm, sideHeightTarget, 5.2, camDt);
+    this._camFovSm = smooth(this._camFovSm, sideFovTarget, 5.6, camDt);
+    this._camSideZSm = smooth(this._camSideZSm, sideZTarget, 8.5, camDt);
+    this._camTargetZSm = smooth(this._camTargetZSm, targetZTarget, 9.2, camDt);
 
     this._camA.set(
       p.x - this._camLookAheadSm * 0.26,
@@ -396,12 +400,20 @@ export class Game {
     this._camPos.copy(this._camA).lerp(this._camC, this._finishCamBlend);
     this._camTarget.copy(this._camB).lerp(this._camD, this._finishCamBlend);
 
-    const camFollow = lerp(0.09, 0.16, this._finishCamBlend);
-    const lookFollow = lerp(0.1, 0.2, this._finishCamBlend);
-    this.camera.position.lerp(this._camPos, camFollow);
-    this._camLookAt.lerp(this._camTarget, lookFollow);
+    const camPosRate = lerp(5.2, 8.2, this._finishCamBlend);
+    const lookRate = lerp(7.0, 10.0, this._finishCamBlend);
+    this.camera.position.set(
+      smooth(this.camera.position.x, this._camPos.x, camPosRate, camDt),
+      smooth(this.camera.position.y, this._camPos.y, camPosRate, camDt),
+      smooth(this.camera.position.z, this._camPos.z, camPosRate, camDt)
+    );
+    this._camLookAt.set(
+      smooth(this._camLookAt.x, this._camTarget.x, lookRate, camDt),
+      smooth(this._camLookAt.y, this._camTarget.y, lookRate, camDt),
+      smooth(this._camLookAt.z, this._camTarget.z, lookRate, camDt)
+    );
     this.camera.lookAt(this._camLookAt.x, this._camLookAt.y, this._camLookAt.z);
-    this.camera.fov = lerp(this._camFovSm, finishFov, this._finishCamBlend);
+    this.camera.fov = smooth(this.camera.fov, lerp(this._camFovSm, finishFov, this._finishCamBlend), 6.4, camDt);
     this.camera.updateProjectionMatrix();
 
     this.renderer.render(this.scene, this.camera);

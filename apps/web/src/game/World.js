@@ -711,27 +711,7 @@ export class World {
 
   _buildLevelScenery() {
     const routeLen = Math.max(24, this.routeEndX - this.routeStartX);
-    const xMin = this.visualStartX;
-    const xMax = this.visualEndX;
-    const count = Math.max(16, Math.round(routeLen / 5));
-
-    const sideMatFar = new THREE.MeshStandardMaterial({ color: 0x121720, roughness: 0.96, metalness: 0.04, emissive: 0x05070a, emissiveIntensity: 0.06 });
-
-    for (let i = 0; i < count; i++) {
-      const t = i / Math.max(1, count - 1);
-      const x = lerp(xMin, xMax, t);
-      const p = this._sampleProfile(x);
-      const h = 3.2 + hash1(x * 0.13) * 5.0;
-      const w = 1.8 + hash1(x * 0.09 + 5) * 2.8;
-
-      const leftRim = new THREE.Mesh(new THREE.BoxGeometry(w, h, 3.0 + hash1(x * 0.17) * 3.5), sideMatFar);
-      leftRim.position.set(x, p.floorY + h * 0.5, -p.halfWidth - 3.8 - hash1(x) * 2.8);
-      leftRim.castShadow = true;
-      leftRim.receiveShadow = true;
-      this.fxGroup.add(leftRim);
-
-      // Keep the camera-side view clear; tunnel shell geometry handles foreground shape now.
-    }
+    // Intentionally no rim "block" scenery here; cave shell geometry provides the tunnel silhouette.
 
     // Subtle sci-fi guide lights along the back wall.
     const guideMat = new THREE.MeshBasicMaterial({ color: 0x2bd7ff, transparent: true, opacity: 0.18 });

@@ -42,267 +42,192 @@ export class Rocket {
   }
 
   _buildRocket() {
+    this.navBeacons.length = 0;
+
     const hullMat = this._matStandard({
-      color: 0xe8f6ff,
-      emissive: 0x02101c,
-      metalness: 0.58,
-      roughness: 0.26
+      color: 0xeef6ff,
+      emissive: 0x071521,
+      emissiveIntensity: 0.22,
+      metalness: 0.68,
+      roughness: 0.18
     });
-    const accentCyan = this._matStandard({
-      color: 0x5fffff,
-      emissive: 0x033345,
-      emissiveIntensity: 0.75,
-      metalness: 0.45,
-      roughness: 0.25
+    const panelMat = this._matStandard({
+      color: 0xc7d6e6,
+      emissive: 0x091520,
+      emissiveIntensity: 0.12,
+      metalness: 0.55,
+      roughness: 0.28
     });
-    const accentMagenta = this._matStandard({
-      color: 0xff4bd8,
-      emissive: 0x3d0834,
-      emissiveIntensity: 0.8,
-      metalness: 0.4,
-      roughness: 0.3
+    const carbonMat = this._matStandard({
+      color: 0x121821,
+      emissive: 0x05080c,
+      emissiveIntensity: 0.08,
+      metalness: 0.72,
+      roughness: 0.42
     });
-    const darkMetal = this._matStandard({
-      color: 0x161b24,
-      emissive: 0x090b12,
-      metalness: 0.75,
-      roughness: 0.35
+    const glowMat = this._matStandard({
+      color: 0x6be9ff,
+      emissive: 0x1aa3d4,
+      emissiveIntensity: 0.95,
+      metalness: 0.2,
+      roughness: 0.18
+    });
+    const accentMat = this._matStandard({
+      color: 0x8cb7ff,
+      emissive: 0x173777,
+      emissiveIntensity: 0.5,
+      metalness: 0.28,
+      roughness: 0.24
     });
     const glass = this._matStandard({
-      color: 0x86f2ff,
-      emissive: 0x0a3f58,
-      emissiveIntensity: 0.55,
-      metalness: 0.15,
-      roughness: 0.08,
+      color: 0xaef6ff,
+      emissive: 0x0f5a78,
+      emissiveIntensity: 0.75,
+      metalness: 0.08,
+      roughness: 0.06,
       transparent: true,
-      opacity: 0.9
+      opacity: 0.92
     });
-    const amber = this._matStandard({
-      color: 0xffcf68,
-      emissive: 0x4f3108,
+    const warmMetal = this._matStandard({
+      color: 0xffc46c,
+      emissive: 0x5e3307,
       emissiveIntensity: 0.35,
-      metalness: 0.2,
-      roughness: 0.3
+      metalness: 0.24,
+      roughness: 0.36
     });
-    const beaconMatA = new THREE.MeshBasicMaterial({
-      color: 0xff8d3a,
-      transparent: true,
-      opacity: 0.4
-    });
-    const beaconMatB = new THREE.MeshBasicMaterial({
-      color: 0x6cf6ff,
-      transparent: true,
-      opacity: 0.35
-    });
+    const beaconWarm = new THREE.MeshBasicMaterial({ color: 0xff9440, transparent: true, opacity: 0.42 });
+    const beaconCool = new THREE.MeshBasicMaterial({ color: 0x76f2ff, transparent: true, opacity: 0.38 });
 
-    this._addMesh(
+    // Main fuselage
+    this._addMesh(this.visual, new THREE.CylinderGeometry(0.32, 0.36, 1.12, 30), hullMat, new THREE.Vector3(0, 0.52, 0));
+    this._addMesh(this.visual, new THREE.CylinderGeometry(0.26, 0.31, 0.88, 30), panelMat, new THREE.Vector3(0, 1.42, 0));
+    this._addMesh(this.visual, new THREE.ConeGeometry(0.23, 0.68, 30), hullMat, new THREE.Vector3(0, 2.22, 0));
+    this._addMesh(this.visual, new THREE.CylinderGeometry(0.22, 0.14, 0.34, 24, 1, true), carbonMat, new THREE.Vector3(0, -0.25, 0));
+
+    const collar = this._addMesh(
       this.visual,
-      new THREE.CylinderGeometry(0.34, 0.42, 1.2, 28, 1, false),
-      hullMat,
-      new THREE.Vector3(0, 0.55, 0)
+      new THREE.TorusGeometry(0.315, 0.022, 12, 48),
+      glowMat,
+      new THREE.Vector3(0, 1.0, 0),
+      new THREE.Euler(Math.PI / 2, 0, 0)
     );
-
-    this._addMesh(
+    collar.castShadow = false;
+    const shoulderBand = this._addMesh(
       this.visual,
-      new THREE.CylinderGeometry(0.28, 0.34, 0.72, 28, 1, false),
-      hullMat,
-      new THREE.Vector3(0, 1.48, 0)
+      new THREE.TorusGeometry(0.28, 0.016, 12, 42),
+      accentMat,
+      new THREE.Vector3(0, 1.7, 0),
+      new THREE.Euler(Math.PI / 2, 0, 0)
     );
+    shoulderBand.castShadow = false;
 
+    // Sleek cockpit canopy + dorsal spine
     this._addMesh(
       this.visual,
-      new THREE.ConeGeometry(0.28, 0.6, 28),
-      hullMat,
-      new THREE.Vector3(0, 2.14, 0)
-    );
-
-    this._addMesh(
-      this.visual,
-      new THREE.SphereGeometry(0.18, 18, 12),
+      new THREE.SphereGeometry(0.19, 20, 14),
       glass,
-      new THREE.Vector3(0, 1.78, 0.16),
+      new THREE.Vector3(0, 1.78, 0.17),
       null,
-      new THREE.Vector3(1, 0.8, 0.4)
+      new THREE.Vector3(1.05, 0.82, 0.42)
     );
+    this._addMesh(this.visual, new THREE.BoxGeometry(0.1, 0.22, 0.16), carbonMat, new THREE.Vector3(0, 1.58, -0.17));
+    this._addMesh(this.visual, new THREE.BoxGeometry(0.16, 0.035, 0.06), glowMat, new THREE.Vector3(0, 1.64, 0.26));
 
-    const band1 = this._addMesh(
-      this.visual,
-      new THREE.TorusGeometry(0.33, 0.03, 10, 32),
-      accentCyan,
-      new THREE.Vector3(0, 1.15, 0),
-      new THREE.Euler(Math.PI / 2, 0, 0)
-    );
-    band1.castShadow = false;
-
-    const band2 = this._addMesh(
-      this.visual,
-      new THREE.TorusGeometry(0.29, 0.022, 10, 32),
-      accentMagenta,
-      new THREE.Vector3(0, 1.78, 0),
-      new THREE.Euler(Math.PI / 2, 0, 0)
-    );
-    band2.castShadow = false;
-
-    this._addMesh(
-      this.visual,
-      new THREE.CylinderGeometry(0.23, 0.12, 0.38, 24, 1, true),
-      darkMetal,
-      new THREE.Vector3(0, -0.24, 0)
-    );
-
-    this._addMesh(
-      this.visual,
-      new THREE.TorusGeometry(0.24, 0.016, 8, 24),
-      accentCyan,
-      new THREE.Vector3(0, -0.03, 0),
-      new THREE.Euler(Math.PI / 2, 0, 0)
-    );
-
-    const finGeom = new THREE.BoxGeometry(0.06, 0.34, 0.34);
-    for (let i = 0; i < 4; i++) {
-      const a = (i / 4) * Math.PI * 2;
-      const r = 0.34;
-      const fin = this._addMesh(
-        this.visual,
-        finGeom,
-        i % 2 === 0 ? accentMagenta : accentCyan,
-        new THREE.Vector3(Math.cos(a) * r, 0.02, Math.sin(a) * r)
-      );
-      fin.lookAt(Math.cos(a) * 2, 0.05, Math.sin(a) * 2);
-      fin.rotation.x += Math.PI / 2;
-      fin.rotation.y += Math.PI / 2;
-      fin.rotation.z += (i % 2 === 0 ? -0.1 : 0.1);
-    }
-
-    const strutGeom = new THREE.CylinderGeometry(0.012, 0.012, 0.35, 8);
-    for (let i = 0; i < 4; i++) {
-      const a = (i / 4) * Math.PI * 2 + Math.PI / 4;
-      const x = Math.cos(a) * 0.18;
-      const z = Math.sin(a) * 0.18;
-      const strut = this._addMesh(
-        this.visual,
-        strutGeom,
-        darkMetal,
-        new THREE.Vector3(x, -0.02, z)
-      );
-      strut.rotation.z = 0.28 * Math.cos(a);
-      strut.rotation.x = 0.28 * Math.sin(a);
-    }
-
-    // Side booster pods + struts for a denser silhouette.
+    // Side nacelles / thruster pods
     for (const side of [-1, 1]) {
-      const x = side * 0.47;
-      this._addMesh(
-        this.visual,
-        new THREE.CylinderGeometry(0.085, 0.11, 0.92, 14),
-        darkMetal,
-        new THREE.Vector3(x, 0.9, 0)
-      );
-      this._addMesh(
-        this.visual,
-        new THREE.ConeGeometry(0.085, 0.22, 14),
-        hullMat,
-        new THREE.Vector3(x, 1.47, 0)
-      );
-      this._addMesh(
-        this.visual,
-        new THREE.CylinderGeometry(0.05, 0.04, 0.12, 12),
-        accentCyan,
-        new THREE.Vector3(x, 1.18, 0.07 * side),
-        new THREE.Euler(Math.PI / 2, 0, 0)
-      );
-      this._addMesh(
-        this.visual,
-        new THREE.CylinderGeometry(0.04, 0.065, 0.16, 12),
-        darkMetal,
-        new THREE.Vector3(x, 0.32, 0)
-      );
+      const sx = side * 0.42;
+      this._addMesh(this.visual, new THREE.CylinderGeometry(0.075, 0.095, 0.94, 16), carbonMat, new THREE.Vector3(sx, 0.98, 0));
+      this._addMesh(this.visual, new THREE.ConeGeometry(0.075, 0.2, 16), panelMat, new THREE.Vector3(sx, 1.55, 0));
+      this._addMesh(this.visual, new THREE.CylinderGeometry(0.052, 0.036, 0.14, 14), warmMetal, new THREE.Vector3(sx, 0.33, 0));
+      this._addMesh(this.visual, new THREE.BoxGeometry(0.17, 0.05, 0.08), glowMat, new THREE.Vector3(side * 0.29, 1.16, 0.14));
 
-      for (const by of [0.58, 1.08]) {
+      for (const by of [0.7, 1.1]) {
         const brace = this._addMesh(
           this.visual,
           new THREE.CylinderGeometry(0.01, 0.01, 0.34, 8),
-          hullMat,
-          new THREE.Vector3(side * 0.26, by, 0)
+          panelMat,
+          new THREE.Vector3(side * 0.23, by, 0)
         );
         brace.rotation.z = side * 0.95;
       }
     }
 
-    // Landing legs / feet.
-    for (let i = 0; i < 4; i++) {
-      const a = (i / 4) * Math.PI * 2 + Math.PI / 4;
-      const x = Math.cos(a) * 0.2;
-      const z = Math.sin(a) * 0.2;
+    // Swept winglets/fins for a cleaner futuristic silhouette (side-view readable).
+    for (const side of [-1, 1]) {
+      const wing = this._addMesh(
+        this.visual,
+        new THREE.BoxGeometry(0.12, 0.38, 0.22),
+        side < 0 ? glowMat : accentMat,
+        new THREE.Vector3(side * 0.22, 0.25, 0)
+      );
+      wing.rotation.z = side * 0.35;
+      wing.rotation.x = 0.06 * side;
+    }
+
+    const dorsalFin = this._addMesh(
+      this.visual,
+      new THREE.BoxGeometry(0.08, 0.34, 0.2),
+      carbonMat,
+      new THREE.Vector3(0, 0.92, -0.22)
+    );
+    dorsalFin.rotation.x = -0.2;
+    const ventralFin = this._addMesh(
+      this.visual,
+      new THREE.BoxGeometry(0.06, 0.28, 0.16),
+      carbonMat,
+      new THREE.Vector3(0, 0.12, -0.18)
+    );
+    ventralFin.rotation.x = 0.2;
+
+    // Landing skids (clear ground read in side view)
+    for (const side of [-1, 1]) {
       const leg = this._addMesh(
         this.visual,
-        new THREE.CylinderGeometry(0.012, 0.018, 0.62, 8),
-        darkMetal,
-        new THREE.Vector3(x, -0.18, z)
+        new THREE.CylinderGeometry(0.011, 0.014, 0.54, 8),
+        carbonMat,
+        new THREE.Vector3(side * 0.14, -0.18, 0.1 * side)
       );
-      leg.rotation.z = 0.62 * Math.cos(a);
-      leg.rotation.x = 0.62 * Math.sin(a);
+      leg.rotation.z = side * 0.35;
+      leg.rotation.x = side * 0.12;
 
-      const foot = this._addMesh(
+      const skid = this._addMesh(
         this.visual,
-        new THREE.CylinderGeometry(0.055, 0.065, 0.028, 12),
-        amber,
-        new THREE.Vector3(Math.cos(a) * 0.42, -0.46, Math.sin(a) * 0.42)
-      );
-      foot.receiveShadow = true;
-    }
-
-    // Upper-body panel ribs and greebles.
-    const ribGeom = new THREE.BoxGeometry(0.028, 0.56, 0.08);
-    for (let i = 0; i < 6; i++) {
-      const a = (i / 6) * Math.PI * 2;
-      const r = 0.31;
-      const rib = this._addMesh(
-        this.visual,
-        ribGeom,
-        i % 2 ? hullMat : darkMetal,
-        new THREE.Vector3(Math.cos(a) * r, 1.32, Math.sin(a) * r)
-      );
-      rib.lookAt(Math.cos(a) * 2, 1.32, Math.sin(a) * 2);
-    }
-
-    this._addMesh(this.visual, new THREE.BoxGeometry(0.18, 0.06, 0.1), darkMetal, new THREE.Vector3(0, 1.62, -0.21));
-    this._addMesh(this.visual, new THREE.BoxGeometry(0.14, 0.05, 0.08), accentMagenta, new THREE.Vector3(0.12, 1.34, -0.2));
-    this._addMesh(this.visual, new THREE.BoxGeometry(0.14, 0.05, 0.08), accentCyan, new THREE.Vector3(-0.12, 1.24, -0.2));
-
-    // RCS pods near the nose.
-    for (const side of [-1, 1]) {
-      const rcs = this._addMesh(
-        this.visual,
-        new THREE.CylinderGeometry(0.022, 0.022, 0.18, 10),
-        darkMetal,
-        new THREE.Vector3(side * 0.22, 1.86, -0.03),
+        new THREE.CylinderGeometry(0.02, 0.02, 0.34, 10),
+        warmMetal,
+        new THREE.Vector3(side * 0.32, -0.44, 0.14 * side),
         new THREE.Euler(0, 0, Math.PI / 2)
       );
-      rcs.receiveShadow = false;
-      this._addMesh(
-        this.visual,
-        new THREE.CylinderGeometry(0.012, 0.018, 0.035, 8),
-        amber,
-        new THREE.Vector3(side * 0.31, 1.86, -0.03),
-        new THREE.Euler(0, 0, Math.PI / 2)
-      );
+      skid.receiveShadow = true;
     }
 
-    // Antenna cluster and blinking beacons.
-    this._addMesh(this.visual, new THREE.CylinderGeometry(0.006, 0.006, 0.32, 6), darkMetal, new THREE.Vector3(0, 2.38, -0.02));
-    this._addMesh(this.visual, new THREE.CylinderGeometry(0.004, 0.004, 0.18, 6), darkMetal, new THREE.Vector3(0.05, 2.28, -0.04), null, null);
+    // Engine cluster
+    this._addMesh(this.visual, new THREE.CylinderGeometry(0.1, 0.13, 0.08, 18), warmMetal, new THREE.Vector3(0, -0.36, 0));
+    for (const x of [-0.08, 0, 0.08]) {
+      const bell = this._addMesh(
+        this.visual,
+        new THREE.CylinderGeometry(0.026, 0.04, 0.11, 12),
+        carbonMat,
+        new THREE.Vector3(x, -0.4, 0)
+      );
+      bell.receiveShadow = false;
+    }
 
-    const beaconTop = this._addMesh(this.visual, new THREE.SphereGeometry(0.035, 10, 8), beaconMatA, new THREE.Vector3(0, 2.56, 0));
-    const beaconLeft = this._addMesh(this.visual, new THREE.SphereGeometry(0.026, 10, 8), beaconMatB, new THREE.Vector3(-0.36, 1.0, 0.18));
-    const beaconRight = this._addMesh(this.visual, new THREE.SphereGeometry(0.026, 10, 8), beaconMatB, new THREE.Vector3(0.36, 1.0, 0.18));
+    // Nose sensors / modern greebles (minimal)
+    this._addMesh(this.visual, new THREE.BoxGeometry(0.14, 0.045, 0.05), carbonMat, new THREE.Vector3(0, 1.9, 0.2));
+    this._addMesh(this.visual, new THREE.BoxGeometry(0.11, 0.03, 0.04), glowMat, new THREE.Vector3(0, 1.9, 0.24));
+    this._addMesh(this.visual, new THREE.CylinderGeometry(0.007, 0.007, 0.24, 6), carbonMat, new THREE.Vector3(0, 2.48, -0.02));
+
+    // Navigation beacons
+    const beaconTop = this._addMesh(this.visual, new THREE.SphereGeometry(0.03, 10, 8), beaconWarm, new THREE.Vector3(0, 2.62, 0));
+    const beaconLeft = this._addMesh(this.visual, new THREE.SphereGeometry(0.024, 10, 8), beaconCool, new THREE.Vector3(-0.34, 1.04, 0.16));
+    const beaconRight = this._addMesh(this.visual, new THREE.SphereGeometry(0.024, 10, 8), beaconCool, new THREE.Vector3(0.34, 1.04, 0.16));
     beaconTop.castShadow = false;
     beaconLeft.castShadow = false;
     beaconRight.castShadow = false;
     this.navBeacons.push(
-      { mesh: beaconTop, base: 0.35, amp: 0.65, speed: 7.2, phase: 0.0 },
-      { mesh: beaconLeft, base: 0.18, amp: 0.4, speed: 4.2, phase: 1.1 },
-      { mesh: beaconRight, base: 0.18, amp: 0.4, speed: 4.2, phase: 2.4 }
+      { mesh: beaconTop, base: 0.35, amp: 0.65, speed: 7.4, phase: 0.0 },
+      { mesh: beaconLeft, base: 0.2, amp: 0.42, speed: 4.8, phase: 1.0 },
+      { mesh: beaconRight, base: 0.2, amp: 0.42, speed: 4.8, phase: 2.3 }
     );
   }
 
@@ -376,15 +301,15 @@ export class Rocket {
     this.group.add(this.groundRef);
 
     const shadowMat = new THREE.MeshBasicMaterial({
-      color: 0x000000,
+      color: 0x05090f,
       transparent: true,
-      opacity: 0.28,
+      opacity: 0.42,
       depthWrite: false
     });
     const ringMat = new THREE.MeshBasicMaterial({
-      color: 0x00f0ff,
+      color: 0x5cecff,
       transparent: true,
-      opacity: 0.16,
+      opacity: 0.26,
       blending: THREE.AdditiveBlending,
       depthWrite: false,
       side: THREE.DoubleSide
@@ -392,7 +317,7 @@ export class Rocket {
     const coreMat = new THREE.MeshBasicMaterial({
       color: 0x7ff6ff,
       transparent: true,
-      opacity: 0.08,
+      opacity: 0.16,
       blending: THREE.AdditiveBlending,
       depthWrite: false,
       side: THREE.DoubleSide
@@ -408,6 +333,12 @@ export class Rocket {
     this.shadowRing.renderOrder = 5;
     this.groundRef.add(this.shadowRing);
 
+    this.shadowPulseRing = new THREE.Mesh(new THREE.RingGeometry(0.46, 0.6, 36), ringMat.clone());
+    this.shadowPulseRing.rotation.x = -Math.PI / 2;
+    this.shadowPulseRing.position.y = 0.003;
+    this.shadowPulseRing.renderOrder = 5;
+    this.groundRef.add(this.shadowPulseRing);
+
     this.shadowCore = new THREE.Mesh(new THREE.CircleGeometry(0.22, 24), coreMat);
     this.shadowCore.rotation.x = -Math.PI / 2;
     this.shadowCore.position.y = 0.005;
@@ -415,7 +346,7 @@ export class Rocket {
     this.groundRef.add(this.shadowCore);
 
     this.altBeam = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.012, 0.03, 1, 10, 1, true),
+      new THREE.CylinderGeometry(0.018, 0.045, 1, 10, 1, true),
       new THREE.MeshBasicMaterial({
         color: 0x66eeff,
         transparent: true,
@@ -440,23 +371,26 @@ export class Rocket {
   updateGroundReference(surfaceY) {
     const alt = Math.max(0.02, this.pos.y - surfaceY);
     const proximity = clamp(1 - alt / 16, 0, 1);
-    const spread = clamp(0.8 + alt * 0.085, 0.8, 2.3);
+    const spread = clamp(0.86 + alt * 0.09, 0.86, 2.6);
 
     this.groundRef.position.set(0, surfaceY - this.pos.y + 0.03, 0);
 
     this.shadowDisc.scale.set(spread, spread, 1);
-    this.shadowDisc.material.opacity = 0.08 + proximity * 0.34;
+    this.shadowDisc.material.opacity = 0.16 + proximity * 0.36;
 
     this.shadowRing.scale.set(spread * 1.04, spread * 1.04, 1);
-    this.shadowRing.material.opacity = 0.05 + proximity * 0.22;
+    this.shadowRing.material.opacity = 0.08 + proximity * 0.28;
 
-    this.shadowCore.material.opacity = 0.04 + proximity * 0.15;
+    this.shadowPulseRing.scale.set(spread * 0.78, spread * 0.78, 1);
+    this.shadowPulseRing.material.opacity = 0.05 + proximity * 0.24 + Math.sin(this._time * 5.5) * 0.03;
+
+    this.shadowCore.material.opacity = 0.08 + proximity * 0.2;
 
     this.altBeam.visible = alt > 0.1;
     if (this.altBeam.visible) {
       this.altBeam.scale.set(1, alt, 1);
       this.altBeam.position.y = -alt * 0.5 + 0.03;
-      this.altBeam.material.opacity = clamp(0.06 + alt * 0.012, 0.06, 0.24);
+      this.altBeam.material.opacity = clamp(0.12 + alt * 0.012, 0.12, 0.34);
     }
   }
 

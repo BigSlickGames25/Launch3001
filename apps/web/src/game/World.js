@@ -56,28 +56,37 @@ export class World {
   }
 
   _setupSceneLighting() {
-    this.hemiLight = new THREE.HemisphereLight(0x7f9ebf, 0x090b0f, 0.8);
+    this.hemiLight = new THREE.HemisphereLight(0xa8c9ee, 0x131920, 1.15);
     this.group.add(this.hemiLight);
 
-    this.sunLight = new THREE.DirectionalLight(0xe6f0ff, 1.1);
-    this.sunLight.position.set(14, 18, 12);
+    this.sunLight = new THREE.DirectionalLight(0xf2f7ff, 1.65);
+    this.sunLight.position.set(16, 20, 14);
     this.sunLight.castShadow = true;
-    this.sunLight.shadow.mapSize.set(1024, 1024);
+    this.sunLight.shadow.mapSize.set(1536, 1536);
     this.sunLight.shadow.camera.near = 1;
-    this.sunLight.shadow.camera.far = 120;
-    this.sunLight.shadow.camera.left = -36;
-    this.sunLight.shadow.camera.right = 36;
-    this.sunLight.shadow.camera.top = 30;
-    this.sunLight.shadow.camera.bottom = -30;
+    this.sunLight.shadow.camera.far = 150;
+    this.sunLight.shadow.camera.left = -44;
+    this.sunLight.shadow.camera.right = 44;
+    this.sunLight.shadow.camera.top = 34;
+    this.sunLight.shadow.camera.bottom = -34;
     this.sunLight.shadow.bias = -0.00015;
+    this.sunLight.shadow.normalBias = 0.02;
     this.group.add(this.sunLight);
+
+    this.fillLight = new THREE.DirectionalLight(0x7fd9ff, 0.7);
+    this.fillLight.position.set(-10, 8, 18);
+    this.group.add(this.fillLight);
+
+    this.rimLight = new THREE.PointLight(0x54dfff, 0.5, 90, 2);
+    this.rimLight.position.set(0, 9, 16);
+    this.group.add(this.rimLight);
   }
 
   _buildAtmosphere() {
     const skyTex = this._makeGradientTexture([
-      [0.0, "#05080e"],
-      [0.45, "#0b111a"],
-      [1.0, "#161f2d"]
+      [0.0, "#0b111a"],
+      [0.42, "#142131"],
+      [1.0, "#233247"]
     ], 32, 512);
     skyTex.colorSpace = THREE.SRGBColorSpace;
 
@@ -95,9 +104,9 @@ export class World {
     this.group.add(this.starField);
 
     const hazeMat = new THREE.MeshBasicMaterial({
-      color: 0x1a2738,
+      color: 0x2d4762,
       transparent: true,
-      opacity: 0.2,
+      opacity: 0.28,
       depthWrite: false,
       blending: THREE.AdditiveBlending,
       side: THREE.DoubleSide,
@@ -113,9 +122,9 @@ export class World {
     this.group.add(this.backdropGroup);
 
     const farPlaneTex = this._makeGradientTexture([
-      [0.0, "#0a1017"],
-      [0.35, "#111a26"],
-      [1.0, "#05070b"]
+      [0.0, "#162331"],
+      [0.35, "#1f3145"],
+      [1.0, "#0f1721"]
     ], 4, 256);
     farPlaneTex.colorSpace = THREE.SRGBColorSpace;
 
@@ -127,13 +136,13 @@ export class World {
     this.backdropGroup.add(this.farBackdrop);
 
     this.ridgeNear = this._createRidgeLayer({ z: -36, yBase: 1.8, height: 5.4, color: 0x1d2b38, opacity: 0.95, seed: 17 });
-    this.ridgeFar = this._createRidgeLayer({ z: -50, yBase: 3.0, height: 7.0, color: 0x121b26, opacity: 0.82, seed: 33 });
+    this.ridgeFar = this._createRidgeLayer({ z: -50, yBase: 3.0, height: 7.0, color: 0x1a2634, opacity: 0.86, seed: 33 });
     this.backdropGroup.add(this.ridgeFar);
     this.backdropGroup.add(this.ridgeNear);
 
     const groundBase = new THREE.Mesh(
       new THREE.PlaneGeometry(420, 180),
-      new THREE.MeshStandardMaterial({ color: 0x10161d, roughness: 0.98, metalness: 0.02 })
+      new THREE.MeshStandardMaterial({ color: 0x18212a, roughness: 0.98, metalness: 0.02 })
     );
     groundBase.rotation.x = -Math.PI / 2;
     groundBase.position.set(0, -0.2, -10);

@@ -18,10 +18,10 @@ export class Game {
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = 1.03;
+    this.renderer.toneMappingExposure = 1.28;
 
     this.scene = new THREE.Scene();
-    this.scene.fog = new THREE.Fog(0x05070a, 26, 180);
+    this.scene.fog = new THREE.Fog(0x0a1018, 38, 240);
 
     this.camera = new THREE.PerspectiveCamera(56, 1, 0.1, 260);
     this._camA = new THREE.Vector3();
@@ -30,6 +30,7 @@ export class Game {
     this._camD = new THREE.Vector3();
     this._camPos = new THREE.Vector3();
     this._camTarget = new THREE.Vector3();
+    this._camLookAt = new THREE.Vector3();
 
     this.ui = new UI();
     this.input = new Input({ canvas, ui: this.ui });
@@ -49,6 +50,12 @@ export class Game {
     this.gravityScale = 1.0;
 
     this._finishCamBlend = 0;
+    this._camLookAheadSm = 9;
+    this._camSideDepthSm = 12;
+    this._camSideHeightSm = 4;
+    this._camFovSm = 60;
+    this._camSideZSm = 0;
+    this._camTargetZSm = 0;
     this._queuedTimer = 0;
     this._queuedAction = null;
     this._wasPaused = false;
@@ -165,6 +172,9 @@ export class Game {
     this.rocket.reset(this.world.spawn);
     this.input.clearThrustState();
     this._finishCamBlend = 0;
+    this._camLookAheadSm = 9;
+    this._camSideZSm = 0;
+    this._camTargetZSm = 0;
     this._clearQueuedAction();
   }
 
@@ -264,7 +274,7 @@ export class Game {
       }
 
       const finishTarget = (this.state === "FINISH_3D" || this.state === "LANDED" || this.state === "LEVEL_TRANSITION") ? 1 : 0;
-      this._finishCamBlend = smooth(this._finishCamBlend, finishTarget, 10.5, dt);
+      this._finishCamBlend = smooth(this._finishCamBlend, finishTarget, 6.4, dt);
     }
 
     this.world.update(dt, this.rocket.pos);
@@ -338,30 +348,32 @@ export class Game {
     const level = LEVELS[this.levelIndex] || LEVELS[0];
     const camCfg = level?.camera || {};
 
-    const routeSpan = Math.max(18, this.world.routeEndX - this.world.routeStartX);
-    const distToFinish = Math.max(0, this.world.routeEndX - p.x);
-    const finishDistNorm = clamp(distToFinish / routeSpan, 0, 1);
     const forwardSpeed = Math.max(0, this.rocket.vel.x);
-    const speedZoom = clamp(this.rocket.vel.length() / 10, 0, 1);
-    const cruiseZoom = clamp(forwardSpeed / 12, 0, 1);
+    const speedZoom = clamp(forwardSpeed / 12, 0, 1);
+    const cruiseZoom = clamp(forwardSpeed / 15, 0, 1);
     const openZoom = this.world.openSpaceFactorAt ? this.world.openSpaceFactorAt(p.x) : 0;
-    const zoom = clamp(Math.max(
-      speedZoom * 0.85,
-      cruiseZoom * 1.0,
-      finishDistNorm * 0.55,
-      openZoom * 0.5
-    ), 0, 1);
-    const lookAhead = clamp(6.5 + forwardSpeed * 1.35 + zoom * 4.8, 6.5, 24);
+    const zoomTarget = clamp(Math.max(speedZoom * 0.9, cruiseZoom * 0.75, openZoom * 0.5), 0, 1);
+    const lookAheadTarget = clamp(8 + forwardSpeed * 0.9 + zoomTarget * 5.0, 8, 20);
+    const sideDepthTarget = (camCfg.gameplayDepth ?? 7.2) + 5.6 + zoomTarget * 6.2 + cruiseZoom * 2.0;
+    const sideHeightTarget = (camCfg.gameplayHeight ?? 2.1) + 1.6 + zoomTarget * 2.2;
+    const sideFovTarget = lerp((camCfg.minFov ?? 48) + 8, (camCfg.maxFov ?? 60) + 8, zoomTarget);
+    const sideZTarget = p.z * 0.12;
+    const targetZTarget = p.z * 0.05;
 
-    // Pull farther back and widen FOV at speed so upcoming terrain stays visible.
-    const sideDepth = (camCfg.gameplayDepth ?? 7.2) + 4.2 + zoom * 9.8 + cruiseZoom * 6.2;
-    const sideHeight = (camCfg.gameplayHeight ?? 2.1) + 1.2 + zoom * 3.8 + cruiseZoom * 1.6;
-    const sideFov = lerp((camCfg.minFov ?? 48) + 5, (camCfg.maxFov ?? 60) + 12, clamp(zoom * 0.9, 0, 1));
-    const camZ = p.z * 0.35;
-    const targetZ = p.z * 0.15;
+    // Smooth the gameplay camera tuning to avoid speed/FOV pumping nausea.
+    this._camLookAheadSm = lerp(this._camLookAheadSm, lookAheadTarget, 0.08);
+    this._camSideDepthSm = lerp(this._camSideDepthSm, sideDepthTarget, 0.08);
+    this._camSideHeightSm = lerp(this._camSideHeightSm, sideHeightTarget, 0.08);
+    this._camFovSm = lerp(this._camFovSm, sideFovTarget, 0.07);
+    this._camSideZSm = lerp(this._camSideZSm, sideZTarget, 0.12);
+    this._camTargetZSm = lerp(this._camTargetZSm, targetZTarget, 0.12);
 
-    this._camA.set(p.x - lookAhead * 0.4, p.y + sideHeight, camZ + sideDepth);
-    this._camB.set(p.x + lookAhead * 1.08, p.y + 0.82, targetZ);
+    this._camA.set(
+      p.x - this._camLookAheadSm * 0.26,
+      p.y + this._camSideHeightSm,
+      this._camSideZSm + this._camSideDepthSm
+    );
+    this._camB.set(p.x + this._camLookAheadSm * 0.88, p.y + 0.8, this._camTargetZSm);
 
     const padPos = this.world.landingPad.position;
     const padTop = this.world.landingPadTopY();
@@ -384,10 +396,12 @@ export class Game {
     this._camPos.copy(this._camA).lerp(this._camC, this._finishCamBlend);
     this._camTarget.copy(this._camB).lerp(this._camD, this._finishCamBlend);
 
-    const camFollow = clamp(0.14 + cruiseZoom * 0.12, 0.14, 0.28);
+    const camFollow = lerp(0.09, 0.16, this._finishCamBlend);
+    const lookFollow = lerp(0.1, 0.2, this._finishCamBlend);
     this.camera.position.lerp(this._camPos, camFollow);
-    this.camera.lookAt(this._camTarget.x, this._camTarget.y, this._camTarget.z);
-    this.camera.fov = lerp(sideFov, finishFov, this._finishCamBlend);
+    this._camLookAt.lerp(this._camTarget, lookFollow);
+    this.camera.lookAt(this._camLookAt.x, this._camLookAt.y, this._camLookAt.z);
+    this.camera.fov = lerp(this._camFovSm, finishFov, this._finishCamBlend);
     this.camera.updateProjectionMatrix();
 
     this.renderer.render(this.scene, this.camera);

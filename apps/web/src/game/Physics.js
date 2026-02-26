@@ -8,9 +8,9 @@ export class Physics {
 
     // Side-scroller tuning: snappier horizontal response, lighter hidden-depth movement.
     this.steerTargetSpeed = 9.4;
-    this.pitchTargetSpeed = 0.7;
+    this.pitchTargetSpeed = 0.16;
     this.steerResponse = 11.0;
-    this.pitchResponse = 8.0;
+    this.pitchResponse = 11.0;
     this.freeDriftDamping = 0.75;
     this.thrustDriftDamping = 0.42;
 
@@ -19,7 +19,8 @@ export class Physics {
     this.autoScrollThrustBonus = 1.6;
 
     // Up/down input trims vertical motion directly for a more fluid side-scroller feel.
-    this.verticalTrimAccel = 15.0;
+    this.verticalTrimAccel = 17.5;
+    this.verticalTrimThrustBonus = 3.5;
 
     // landing tolerances
     this.maxVspd = 6.0;
@@ -46,7 +47,8 @@ export class Physics {
     const targetVz = (-pitch) * this.pitchTargetSpeed;
 
     // Map up/down into visible vertical motion so controls feel like a side scroller.
-    rocket.vel.y += pitch * this.verticalTrimAccel * dt;
+    const verticalTrim = this.verticalTrimAccel + (input.thrustHeld ? this.verticalTrimThrustBonus : 0);
+    rocket.vel.y += pitch * verticalTrim * dt;
 
     const steerResponse = this.steerResponse + steerMag * 2.2;
     const pitchResponse = this.pitchResponse + pitchMag * 1.5;
@@ -55,6 +57,9 @@ export class Physics {
 
     rocket.vel.x += (targetVx - rocket.vel.x) * steerBlend;
     rocket.vel.z += (targetVz - rocket.vel.z) * pitchBlend;
+
+    // Keep hidden-depth drift from accumulating; this is primarily a 2D lane.
+    rocket.vel.z *= Math.exp(-3.4 * dt);
 
     // Extra damping near center so the rocket settles instead of sliding forever.
     const nearCenter = Math.max(0, 1 - Math.max(steerMag, pitchMag) / 0.28);

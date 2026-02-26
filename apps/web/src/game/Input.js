@@ -9,6 +9,8 @@ export class Input {
     this.touchThrust = false;
     this.keyboardThrust = false;
     this._boostPointers = new Set();
+    this._canvasThrustPointers = new Set();
+    this._keyboardThrustKeys = new Set();
 
     // Tilt state
     this.motionEnabled = false;
@@ -16,11 +18,11 @@ export class Input {
     this.raw = { x: 0, y: 0 };
     this.joy = { x: 0, y: 0 };
     this.tilt = { x: 0, y: 0 }; // smoothed
-    this.tiltRate = 18;
+    this.tiltRate = 22;
     this.sensitivityScale = 1.8;
-    this.keyboardAxisStrength = 1.0;
-    this.deadzone = { x: 0.06, y: 0.045 };
-    this.responseExpo = { x: 1.4, y: 1.18 };
+    this.keyboardAxisStrength = 1.15;
+    this.deadzone = { x: 0.025, y: 0.02 };
+    this.responseExpo = { x: 1.05, y: 1.0 };
     this._hasMotionSample = false;
     this._joyPointerId = null;
     this.scoreOnlyUI = !!document.getElementById("app")?.classList.contains("side-scroll-ui")
@@ -55,6 +57,32 @@ export class Input {
   }
 
   _bindTouch() {
+    if (this.canvas) {
+      const canvasDown = (e) => {
+        if (typeof e.button === "number" && e.button !== 0) return;
+        // Do not treat joystick interactions as canvas thrust presses.
+        if (e.target?.closest?.("#joystickPad")) return;
+        e.preventDefault();
+        try { this.canvas.setPointerCapture?.(e.pointerId); } catch {}
+        this._canvasThrustPointers.add(e.pointerId);
+        this.touchThrust = this._boostPointers.size > 0 || this._canvasThrustPointers.size > 0;
+        this._syncThrust();
+      };
+      const canvasUp = (e) => {
+        if (!this._canvasThrustPointers.has(e.pointerId)) return;
+        this._canvasThrustPointers.delete(e.pointerId);
+        this.touchThrust = this._boostPointers.size > 0 || this._canvasThrustPointers.size > 0;
+        this._syncThrust();
+      };
+
+      this.canvas.addEventListener("pointerdown", canvasDown, { passive: false });
+      this.canvas.addEventListener("pointerup", canvasUp);
+      this.canvas.addEventListener("pointercancel", canvasUp);
+      this.canvas.addEventListener("lostpointercapture", canvasUp);
+      window.addEventListener("pointerup", canvasUp);
+      window.addEventListener("pointercancel", canvasUp);
+    }
+
     const boostBtn = this.ui.btnBoost;
     if (boostBtn) {
       const boostDown = (e) => {
@@ -62,13 +90,13 @@ export class Input {
         e.preventDefault();
         try { boostBtn.setPointerCapture(e.pointerId); } catch {}
         this._boostPointers.add(e.pointerId);
-        this.touchThrust = this._boostPointers.size > 0;
+        this.touchThrust = this._boostPointers.size > 0 || this._canvasThrustPointers.size > 0;
         this._syncThrust();
       };
       const boostUp = (e) => {
         if (!this._boostPointers.has(e.pointerId)) return;
         this._boostPointers.delete(e.pointerId);
-        this.touchThrust = this._boostPointers.size > 0;
+        this.touchThrust = this._boostPointers.size > 0 || this._canvasThrustPointers.size > 0;
         this._syncThrust();
       };
       boostBtn.addEventListener("pointerdown", boostDown);
@@ -139,13 +167,19 @@ export class Input {
       if (code === "ArrowRight" || code === "KeyD") this.keys.right = isDown;
       if (code === "ArrowUp" || code === "KeyW") this.keys.up = isDown;
       if (code === "ArrowDown" || code === "KeyS") this.keys.down = isDown;
-      if (code === "Space") this.keyboardThrust = isDown;
+      if (code === "Space" || code === "ShiftLeft" || code === "ShiftRight" || code === "KeyJ") {
+        if (isDown) this._keyboardThrustKeys.add(code);
+        else this._keyboardThrustKeys.delete(code);
+        this.keyboardThrust = this._keyboardThrustKeys.size > 0;
+      }
       this._syncThrust();
     };
 
     window.addEventListener("keydown", (e) => {
       if (
         e.code === "Space" ||
+        e.code === "ShiftLeft" ||
+        e.code === "ShiftRight" ||
         e.code === "ArrowLeft" ||
         e.code === "ArrowRight" ||
         e.code === "ArrowUp" ||
@@ -159,6 +193,8 @@ export class Input {
     window.addEventListener("keyup", (e) => {
       if (
         e.code === "Space" ||
+        e.code === "ShiftLeft" ||
+        e.code === "ShiftRight" ||
         e.code === "ArrowLeft" ||
         e.code === "ArrowRight" ||
         e.code === "ArrowUp" ||
@@ -175,7 +211,9 @@ export class Input {
       this.keys.up = false;
       this.keys.down = false;
       this.keyboardThrust = false;
+      this._keyboardThrustKeys.clear();
       this._boostPointers.clear();
+      this._canvasThrustPointers.clear();
       this.touchThrust = false;
       if (this._releaseJoystick) this._releaseJoystick();
       this._syncThrust();
@@ -189,8 +227,10 @@ export class Input {
 
   clearThrustState() {
     this._boostPointers.clear();
+    this._canvasThrustPointers.clear();
     this.touchThrust = false;
     this.keyboardThrust = false;
+    this._keyboardThrustKeys.clear();
     if (this._releaseJoystick) this._releaseJoystick();
     this._syncThrust();
   }
@@ -367,17 +407,33 @@ export class Input {
     const yAxisBase = steerSourceY + ky * this.keyboardAxisStrength;
     const xAxis = (this.invertLR ? -1 : 1) * xAxisBase;
     const yAxis = (this.invertFB ? -1 : 1) * yAxisBase;
+    const keyboardActive = kx !== 0 || ky !== 0;
 
-    const shapedX = this._shapeAxis(xAxis, this.deadzone.x, this.responseExpo.x);
-    const shapedY = this._shapeAxis(yAxis, this.deadzone.y, this.responseExpo.y);
+    const shapedX = keyboardActive
+      ? clamp(xAxis, -1.25, 1.25)
+      : this._shapeAxis(xAxis, this.deadzone.x, this.responseExpo.x);
+    const shapedY = keyboardActive
+      ? clamp(yAxis, -1.25, 1.25)
+      : this._shapeAxis(yAxis, this.deadzone.y, this.responseExpo.y);
 
-    // 100% now maps to a stronger, more responsive feel than the previous tuning pass.
-    const sensGain = 0.18 + this.sensitivityScale * 1.85;
-    const tx = clamp(shapedX * sensGain, -2.4, 2.4);
-    const ty = clamp(shapedY * sensGain, -2.4, 2.4);
+    const sensGain = 0.2 + this.sensitivityScale * 1.65;
+    const tx = clamp(shapedX * sensGain, -2.1, 2.1);
+    const ty = clamp(shapedY * sensGain, -1.9, 1.9);
 
-    const activeRate = this.steerMode === "JOYSTICK" ? 22 : this.steerMode === "TABLETOP" ? 14 : this.tiltRate;
-    const centerRate = this.steerMode === "JOYSTICK" ? 26 : this.steerMode === "TABLETOP" ? 18 : 22;
+    const activeRate = keyboardActive
+      ? 34
+      : this.steerMode === "JOYSTICK"
+        ? 28
+        : this.steerMode === "TABLETOP"
+          ? 18
+          : this.tiltRate;
+    const centerRate = keyboardActive
+      ? 30
+      : this.steerMode === "JOYSTICK"
+        ? 30
+        : this.steerMode === "TABLETOP"
+          ? 20
+          : 24;
     const xRate = Math.abs(tx) < 0.03 ? centerRate : activeRate;
     const yRate = Math.abs(ty) < 0.03 ? centerRate : activeRate;
 

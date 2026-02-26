@@ -1,7 +1,7 @@
 import { Game } from "./game/Game.js";
 
-const canvas = document.getElementById("gameCanvas");
-if (!canvas) throw new Error("Missing #gameCanvas");
+const canvas = document.getElementById("gameCanvas") || document.getElementById("c");
+if (!canvas) throw new Error("Missing canvas (#gameCanvas or #c)");
 
 const game = new Game({ canvas });
 game.start();

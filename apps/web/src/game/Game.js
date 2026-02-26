@@ -341,15 +341,18 @@ export class Game {
     const distToFinish = Math.max(0, this.world.routeEndX - p.x);
     const finishDistNorm = clamp(distToFinish / routeSpan, 0, 1);
     const speedZoom = clamp(this.rocket.vel.length() / 10, 0, 1);
+    const forwardSpeed = Math.max(0, this.rocket.vel.x);
     const openZoom = this.world.openSpaceFactorAt ? this.world.openSpaceFactorAt(p.x) : 0;
     const zoom = clamp(Math.max(speedZoom * 0.75, finishDistNorm * 0.55, openZoom * 0.45), 0, 1);
+    const lookAhead = clamp(4.2 + forwardSpeed * 0.8 + zoom * 3.0, 4.2, 12.5);
 
-    const sideDepth = (camCfg.gameplayDepth ?? 7.2) + zoom * 6.4;
-    const sideHeight = (camCfg.gameplayHeight ?? 2.1) + zoom * 2.8;
-    const sideFov = lerp(camCfg.minFov ?? 48, camCfg.maxFov ?? 60, zoom);
+    // Pull back the gameplay camera and bias the target forward so more route is visible.
+    const sideDepth = (camCfg.gameplayDepth ?? 7.2) + 2.0 + zoom * 8.2;
+    const sideHeight = (camCfg.gameplayHeight ?? 2.1) + 0.7 + zoom * 3.4;
+    const sideFov = lerp((camCfg.minFov ?? 48) + 2, (camCfg.maxFov ?? 60) + 6, zoom);
 
-    this._camA.set(p.x, p.y + sideHeight, p.z + sideDepth);
-    this._camB.set(p.x, p.y + 0.82, p.z);
+    this._camA.set(p.x - lookAhead * 0.2, p.y + sideHeight, p.z + sideDepth);
+    this._camB.set(p.x + lookAhead, p.y + 0.82, p.z);
 
     const padPos = this.world.landingPad.position;
     const padTop = this.world.landingPadTopY();

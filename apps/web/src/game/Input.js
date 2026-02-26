@@ -210,15 +210,20 @@ export class Input {
   }
 
   _bindButtons() {
-    this.ui.btnMotion.addEventListener("click", async () => {
+    const onClick = (el, fn) => {
+      if (!el) return;
+      el.addEventListener("click", fn);
+    };
+
+    onClick(this.ui.btnMotion, async () => {
       await this.enableMotion();
       this.ui.toggleMenu(false);
     });
-    this.ui.btnCal.addEventListener("click", () => {
+    onClick(this.ui.btnCal, () => {
       this.calibrate();
       this.ui.toggleMenu(false);
     });
-    this.ui.btnSteer.addEventListener("click", () => {
+    onClick(this.ui.btnSteer, () => {
       const modes = ["UPRIGHT", "TABLETOP", "JOYSTICK"];
       const nextIdx = (modes.indexOf(this.steerMode) + 1) % modes.length;
       this.steerMode = modes[nextIdx];
@@ -233,19 +238,19 @@ export class Input {
       this.ui.setStatus(`STEER ${this.steerMode}`, "ok");
       this.ui.toggleMenu(false);
     });
-    this.ui.btnSwapSides.addEventListener("click", () => {
+    onClick(this.ui.btnSwapSides, () => {
       this.swapControlSides = !this.swapControlSides;
       localStorage.setItem("launcher_swap_control_sides", this.swapControlSides ? "1" : "0");
       this.ui.setControlSidesSwapped(this.swapControlSides);
       this.ui.setStatus(`CTRL SIDES ${this.swapControlSides ? "SWAP" : "DEFAULT"}`, "ok");
     });
-    this.ui.btnInvertLR.addEventListener("click", () => {
+    onClick(this.ui.btnInvertLR, () => {
       this.invertLR = !this.invertLR;
       localStorage.setItem("launcher_invert_lr", this.invertLR ? "1" : "0");
       this.ui.setInvertLR(this.invertLR);
       this.ui.setStatus(`INV L/R ${this.invertLR ? "ON" : "OFF"}`, "ok");
     });
-    this.ui.btnInvertFB.addEventListener("click", () => {
+    onClick(this.ui.btnInvertFB, () => {
       this.invertFB = !this.invertFB;
       localStorage.setItem("launcher_invert_fb", this.invertFB ? "1" : "0");
       this.ui.setInvertFB(this.invertFB);

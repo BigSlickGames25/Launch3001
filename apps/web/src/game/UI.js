@@ -1,12 +1,20 @@
 export class UI {
   constructor() {
+    const byId = (...ids) => {
+      for (const id of ids) {
+        const el = document.getElementById(id);
+        if (el) return el;
+      }
+      return null;
+    };
+
     this.app = document.getElementById("app");
 
-    this.lvl = document.getElementById("lvl");
-    this.score = document.getElementById("score");
-    this.best = document.getElementById("best");
+    this.lvl = byId("lvl", "statLevel");
+    this.score = byId("score", "statScore");
+    this.best = byId("best", "statBest");
 
-    this.status = document.getElementById("status");
+    this.status = byId("status", "centerBanner");
     this.gyroPad = document.getElementById("gyroPad");
     this.gyroBall = document.getElementById("gyroBall");
     this.mobileControls = document.getElementById("mobileControls");
@@ -15,10 +23,10 @@ export class UI {
     this.joystickStick = document.getElementById("joystickStick");
     this.btnBoost = document.getElementById("btnBoost");
 
-    this.menuScrim = document.getElementById("menuScrim");
-    this.settingsMenu = document.getElementById("settingsMenu");
-    this.btnMenu = document.getElementById("btnMenu");
-    this.btnMenuClose = document.getElementById("btnMenuClose");
+    this.menuScrim = byId("menuScrim", "pauseScrim");
+    this.settingsMenu = byId("settingsMenu", "pausePanel");
+    this.btnMenu = byId("btnMenu", "btnPause");
+    this.btnMenuClose = byId("btnMenuClose", "btnClosePanel");
     this.btnMotion = document.getElementById("btnMotion");
     this.btnCal = document.getElementById("btnCal");
     this.btnSteer = document.getElementById("btnSteer");
@@ -29,11 +37,11 @@ export class UI {
     this.gravRange = document.getElementById("gravRange");
     this.sensValue = document.getElementById("sensValue");
     this.gravValue = document.getElementById("gravValue");
-    this.levelJumpInput = document.getElementById("levelJumpInput");
-    this.levelJumpMax = document.getElementById("levelJumpMax");
-    this.btnGoLevel = document.getElementById("btnGoLevel");
+    this.levelJumpInput = byId("levelJumpInput", "startLevelInput");
+    this.levelJumpMax = byId("levelJumpMax", "startLevelMax");
+    this.btnGoLevel = byId("btnGoLevel", "startLevelApply");
     this.btnCam = document.getElementById("btnCam");
-    this.btnReset = document.getElementById("btnReset");
+    this.btnReset = byId("btnReset", "btnRestartLevel");
 
     this._statusTimer = 0;
     this._statusBase = "READY";

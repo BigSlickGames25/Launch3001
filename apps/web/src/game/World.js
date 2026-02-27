@@ -59,10 +59,10 @@ export class World {
   }
 
   _setupSceneLighting() {
-    this.hemiLight = new THREE.HemisphereLight(0xb8d8f4, 0x1a222b, 1.35);
+    this.hemiLight = new THREE.HemisphereLight(0xc9e2ff, 0x25303a, 1.9);
     this.group.add(this.hemiLight);
 
-    this.sunLight = new THREE.DirectionalLight(0xf8fbff, 1.95);
+    this.sunLight = new THREE.DirectionalLight(0xffffff, 2.6);
     this.sunLight.position.set(16, 20, 14);
     this.sunLight.castShadow = true;
     this.sunLight.shadow.mapSize.set(1536, 1536);
@@ -76,13 +76,16 @@ export class World {
     this.sunLight.shadow.normalBias = 0.02;
     this.group.add(this.sunLight);
 
-    this.fillLight = new THREE.DirectionalLight(0x8fe2ff, 0.95);
+    this.fillLight = new THREE.DirectionalLight(0xa5e9ff, 1.55);
     this.fillLight.position.set(-10, 8, 18);
     this.group.add(this.fillLight);
 
-    this.rimLight = new THREE.PointLight(0x54dfff, 0.9, 110, 2);
+    this.rimLight = new THREE.PointLight(0x6fe8ff, 1.35, 140, 2);
     this.rimLight.position.set(0, 9, 16);
     this.group.add(this.rimLight);
+
+    this.ambientLight = new THREE.AmbientLight(0xb8d6f0, 0.62);
+    this.group.add(this.ambientLight);
   }
 
   _buildAtmosphere() {
@@ -171,9 +174,9 @@ export class World {
     this.landingPad = this._createLandingPad();
     this.group.add(this.landingPad);
 
-    this.launchGlow = new THREE.PointLight(0x4ce7ff, 1.6, 18, 2);
+    this.launchGlow = new THREE.PointLight(0x4ce7ff, 2.3, 24, 2);
     this.group.add(this.launchGlow);
-    this.landingGlow = new THREE.PointLight(0xffbf58, 1.8, 20, 2);
+    this.landingGlow = new THREE.PointLight(0xffbf58, 2.5, 26, 2);
     this.group.add(this.landingGlow);
   }
 
@@ -349,10 +352,10 @@ export class World {
 
     this.launchGlow.position.set(this.launchPad.position.x, this.launchPadTopY() + 1.6, this.launchPad.position.z);
     this.landingGlow.position.set(this.landingPad.position.x, this.landingPadTopY() + 1.8, this.landingPad.position.z);
-    this.launchGlow.intensity = 1.6;
-    this.landingGlow.intensity = 1.8;
-    this._lightsPulse.push({ light: this.launchGlow, base: 1.6, speed: 2.8, amp: 0.16 });
-    this._lightsPulse.push({ light: this.landingGlow, base: 1.8, speed: 3.4, amp: 0.2 });
+    this.launchGlow.intensity = 2.3;
+    this.landingGlow.intensity = 2.5;
+    this._lightsPulse.push({ light: this.launchGlow, base: 2.3, speed: 2.8, amp: 0.18 });
+    this._lightsPulse.push({ light: this.landingGlow, base: 2.5, speed: 3.4, amp: 0.24 });
 
     this.spawn.set(this.launchPad.position.x, this.launchPadTopY() + 0.6, this.launchPad.position.z);
 
@@ -428,8 +431,8 @@ export class World {
       }
     }
 
-    // Raise the roof significantly so the route reads like a larger hangar/cave tunnel volume.
-    ceilingY += 1.65;
+    // Raise the roof aggressively so players can see upcoming obstacles clearly.
+    ceilingY += 3.15;
 
     // Smoothly flatten and widen around pads for reliable takeoff/landing.
     const flattenAroundPad = (padX, padHalf) => {
@@ -440,13 +443,13 @@ export class World {
       const s = smooth01(t);
       floorY = lerp(floorY, 0, s);
       halfWidth = Math.max(halfWidth, lerp(halfWidth, Math.max(padHalf + 1.2, c.baseHalfWidth || halfWidth), s));
-      ceilingY = Math.max(ceilingY, floorY + Math.max(5.8, (c.baseHalfHeight || 4.6) * 2.05));
+      ceilingY = Math.max(ceilingY, floorY + Math.max(7.2, (c.baseHalfHeight || 4.6) * 2.45));
     };
 
     flattenAroundPad(this.launchPad.position.x, this.launchPadHalf);
     flattenAroundPad(this.landingPad.position.x, this.landingPadHalf);
 
-    const minClear = 4.8;
+    const minClear = 6.4;
     if (ceilingY < floorY + minClear) ceilingY = floorY + minClear;
 
     return { x, floorY, ceilingY, halfWidth };
@@ -483,11 +486,11 @@ export class World {
   }
 
   _buildCorridorGeometry() {
-    const floorMat = new THREE.MeshStandardMaterial({ color: 0x303942, roughness: 0.88, metalness: 0.14, emissive: 0x0a1017, emissiveIntensity: 0.22 });
-    const roofMat = new THREE.MeshStandardMaterial({ color: 0x36414d, roughness: 0.84, metalness: 0.16, emissive: 0x0e141c, emissiveIntensity: 0.2 });
-    const wallMat = new THREE.MeshStandardMaterial({ color: 0x29333d, roughness: 0.86, metalness: 0.16, emissive: 0x0b1219, emissiveIntensity: 0.22 });
-    const lipMat = new THREE.MeshStandardMaterial({ color: 0x4a5663, roughness: 0.74, metalness: 0.22, emissive: 0x131d28, emissiveIntensity: 0.24 });
-    const shellMat = new THREE.MeshStandardMaterial({ color: 0x2e3842, roughness: 0.82, metalness: 0.14, emissive: 0x0b141d, emissiveIntensity: 0.22 });
+    const floorMat = new THREE.MeshStandardMaterial({ color: 0x465362, roughness: 0.82, metalness: 0.14, emissive: 0x1c2834, emissiveIntensity: 0.42 });
+    const roofMat = new THREE.MeshStandardMaterial({ color: 0x4c5b6b, roughness: 0.78, metalness: 0.18, emissive: 0x1d2a37, emissiveIntensity: 0.4 });
+    const wallMat = new THREE.MeshStandardMaterial({ color: 0x3e4b58, roughness: 0.8, metalness: 0.18, emissive: 0x182430, emissiveIntensity: 0.42 });
+    const lipMat = new THREE.MeshStandardMaterial({ color: 0x617185, roughness: 0.68, metalness: 0.24, emissive: 0x253546, emissiveIntensity: 0.48 });
+    const shellMat = new THREE.MeshStandardMaterial({ color: 0x435362, roughness: 0.76, metalness: 0.16, emissive: 0x192735, emissiveIntensity: 0.42 });
 
     const xSeg = 240;
     const zSeg = 14;
@@ -724,25 +727,25 @@ export class World {
     if (count <= 0) return;
 
     const frameMat = new THREE.MeshStandardMaterial({
-      color: 0x303a45,
-      roughness: 0.72,
-      metalness: 0.48,
-      emissive: 0x0a1018,
-      emissiveIntensity: 0.16
+      color: 0x4e5a67,
+      roughness: 0.62,
+      metalness: 0.5,
+      emissive: 0x1a2633,
+      emissiveIntensity: 0.32
     });
     const grateMat = new THREE.MeshStandardMaterial({
-      color: 0x5f6f7f,
-      roughness: 0.55,
-      metalness: 0.62,
-      emissive: 0x0b1722,
-      emissiveIntensity: 0.12
+      color: 0x8ea2b6,
+      roughness: 0.48,
+      metalness: 0.66,
+      emissive: 0x22374d,
+      emissiveIntensity: 0.26
     });
     const warningMat = new THREE.MeshStandardMaterial({
       color: 0xffa93f,
-      roughness: 0.42,
+      roughness: 0.36,
       metalness: 0.34,
       emissive: 0x572a04,
-      emissiveIntensity: 0.4
+      emissiveIntensity: 0.66
     });
 
     for (let i = 0; i < count; i++) {
@@ -778,6 +781,10 @@ export class World {
       const barSpan = Math.max(0.7, y1 - y0);
       const group = new THREE.Group();
       group.position.set(x, 0, zCenter);
+
+      const warnLight = new THREE.PointLight(0xffab40, 1.15, 11, 2);
+      warnLight.position.set(0, (y0 + y1) * 0.5, 0);
+      group.add(warnLight);
 
       // Frame rails
       const topRail = new THREE.Mesh(new THREE.BoxGeometry(xThickness, 0.09, zHalf * 2 + 0.18), frameMat);

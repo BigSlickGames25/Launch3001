@@ -18,10 +18,10 @@ export class Game {
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = 1.5;
+    this.renderer.toneMappingExposure = 1.95;
 
     this.scene = new THREE.Scene();
-    this.scene.fog = new THREE.Fog(0x151d26, 62, 300);
+    this.scene.fog = new THREE.Fog(0x25313d, 92, 420);
 
     this.camera = new THREE.PerspectiveCamera(56, 1, 0.1, 260);
     this._camA = new THREE.Vector3();

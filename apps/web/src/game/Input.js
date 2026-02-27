@@ -17,12 +17,13 @@ export class Input {
     this.bias = { x: 0, y: 0 };
     this.raw = { x: 0, y: 0 };
     this.joy = { x: 0, y: 0 };
+    this._keyAxis = { x: 0, y: 0 };
     this.tilt = { x: 0, y: 0 }; // smoothed
-    this.tiltRate = 22;
-    this.sensitivityScale = 1.8;
-    this.keyboardAxisStrength = 1.15;
-    this.deadzone = { x: 0.025, y: 0.02 };
-    this.responseExpo = { x: 1.05, y: 1.0 };
+    this.tiltRate = 18;
+    this.sensitivityScale = 1.2;
+    this.keyboardAxisStrength = 0.9;
+    this.deadzone = { x: 0.08, y: 0.08 };
+    this.responseExpo = { x: 1.18, y: 1.25 };
     this._hasMotionSample = false;
     this._joyPointerId = null;
     this.scoreOnlyUI = !!document.getElementById("app")?.classList.contains("side-scroll-ui")
@@ -113,13 +114,25 @@ export class Input {
         const cy = rect.top + rect.height * 0.5;
         let nx = (e.clientX - cx) / (rect.width * 0.5);
         let ny = (e.clientY - cy) / (rect.height * 0.5);
-        const mag = Math.hypot(nx, ny);
-        if (mag > 1) {
-          nx /= mag;
-          ny /= mag;
+        const magRaw = Math.hypot(nx, ny);
+        if (magRaw > 1) {
+          nx /= magRaw;
+          ny /= magRaw;
         }
-        this.joy.x = clamp(nx * 1.15, -1.25, 1.25);
-        this.joy.y = clamp(ny * 1.15, -1.25, 1.25);
+
+        const deadzone = 0.14;
+        const mag = Math.min(1, Math.hypot(nx, ny));
+        let shapedMag = 0;
+        if (mag > deadzone) {
+          const t = (mag - deadzone) / (1 - deadzone);
+          shapedMag = t * t * (3 - 2 * t); // smoothstep
+        }
+        const unitX = mag > 0.0001 ? nx / mag : 0;
+        const unitY = mag > 0.0001 ? ny / mag : 0;
+
+        // Reduce vertical authority on the virtual stick to avoid wild altitude swings.
+        this.joy.x = clamp(unitX * shapedMag * 1.0, -1, 1);
+        this.joy.y = clamp(unitY * shapedMag * 0.62, -0.62, 0.62);
         this.ui.setJoystickStick(this.joy.x, this.joy.y);
       };
 
@@ -210,6 +223,8 @@ export class Input {
       this.keys.right = false;
       this.keys.up = false;
       this.keys.down = false;
+      this._keyAxis.x = 0;
+      this._keyAxis.y = 0;
       this.keyboardThrust = false;
       this._keyboardThrustKeys.clear();
       this._boostPointers.clear();
@@ -231,6 +246,8 @@ export class Input {
     this.touchThrust = false;
     this.keyboardThrust = false;
     this._keyboardThrustKeys.clear();
+    this._keyAxis.x = 0;
+    this._keyAxis.y = 0;
     if (this._releaseJoystick) this._releaseJoystick();
     this._syncThrust();
   }
@@ -401,10 +418,13 @@ export class Input {
   update(dt) {
     const kx = (this.keys.right ? 1 : 0) - (this.keys.left ? 1 : 0);
     const ky = (this.keys.up ? 1 : 0) - (this.keys.down ? 1 : 0);
+    this._keyAxis.x = smooth(this._keyAxis.x, kx, 14, dt);
+    this._keyAxis.y = smooth(this._keyAxis.y, ky, 14, dt);
+
     const steerSourceX = this.steerMode === "JOYSTICK" ? this.joy.x : (this.raw.x - this.bias.x);
     const steerSourceY = this.steerMode === "JOYSTICK" ? this.joy.y : (this.raw.y - this.bias.y);
-    const xAxisBase = steerSourceX + kx * this.keyboardAxisStrength;
-    const yAxisBase = steerSourceY + ky * this.keyboardAxisStrength;
+    const xAxisBase = steerSourceX + this._keyAxis.x * this.keyboardAxisStrength;
+    const yAxisBase = steerSourceY + this._keyAxis.y * this.keyboardAxisStrength;
     const xAxis = (this.invertLR ? -1 : 1) * xAxisBase;
     const yAxis = (this.invertFB ? -1 : 1) * yAxisBase;
     const keyboardActive = kx !== 0 || ky !== 0;
@@ -416,26 +436,28 @@ export class Input {
       ? clamp(yAxis, -1.25, 1.25)
       : this._shapeAxis(yAxis, this.deadzone.y, this.responseExpo.y);
 
-    const sensGain = 0.2 + this.sensitivityScale * 1.65;
-    const tx = clamp(shapedX * sensGain, -2.1, 2.1);
-    const ty = clamp(shapedY * sensGain, -1.9, 1.9);
+    const sensGain = 0.18 + this.sensitivityScale * 1.15;
+    const xGain = this.steerMode === "JOYSTICK" ? 1.0 : 1.0;
+    const yGain = this.steerMode === "JOYSTICK" ? 0.55 : 0.78;
+    const tx = clamp(shapedX * sensGain * xGain, -1.35, 1.35);
+    const ty = clamp(shapedY * sensGain * yGain, -0.82, 0.82);
 
     const activeRate = keyboardActive
-      ? 34
+      ? 15
       : this.steerMode === "JOYSTICK"
-        ? 28
+        ? 12
         : this.steerMode === "TABLETOP"
-          ? 18
+          ? 12
           : this.tiltRate;
     const centerRate = keyboardActive
-      ? 30
+      ? 14
       : this.steerMode === "JOYSTICK"
-        ? 30
+        ? 15
         : this.steerMode === "TABLETOP"
-          ? 20
-          : 24;
-    const xRate = Math.abs(tx) < 0.03 ? centerRate : activeRate;
-    const yRate = Math.abs(ty) < 0.03 ? centerRate : activeRate;
+          ? 14
+          : 18;
+    const xRate = Math.abs(tx) < 0.02 ? centerRate : activeRate;
+    const yRate = Math.abs(ty) < 0.02 ? centerRate : Math.max(10, activeRate - 2);
 
     this.tilt.x = smooth(this.tilt.x, tx, xRate, dt);
     this.tilt.y = smooth(this.tilt.y, ty, yRate, dt);

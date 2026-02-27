@@ -6,21 +6,19 @@ export class Physics {
     this.wind = 0.0;
     this.maxSpeed = 28;
 
-    // Side-scroller tuning: snappier horizontal response, lighter hidden-depth movement.
-    this.steerTargetSpeed = 9.4;
-    this.pitchTargetSpeed = 0.16;
-    this.steerResponse = 11.0;
-    this.pitchResponse = 11.0;
-    this.freeDriftDamping = 0.75;
-    this.thrustDriftDamping = 0.42;
+    // Smooth side-scroller tuning (no forced auto-scroll).
+    this.steerTargetSpeed = 7.4;
+    this.pitchTargetSpeed = 0.05;
+    this.steerResponse = 8.4;
+    this.pitchResponse = 7.2;
+    this.freeDriftDamping = 1.0;
+    this.thrustDriftDamping = 0.65;
 
-    // Light auto-scroll keeps the run moving forward like a true side scroller.
-    this.autoScrollBase = 2.0;
-    this.autoScrollThrustBonus = 1.6;
-
-    // Up/down input trims vertical motion directly for a more fluid side-scroller feel.
-    this.verticalTrimAccel = 17.5;
-    this.verticalTrimThrustBonus = 3.5;
+    // Up/down input is a soft vertical trim, not a hard shove.
+    this.verticalTrimAccel = 6.2;
+    this.verticalTrimThrustBonus = 0.9;
+    this.verticalCenterDamping = 0.9;
+    this.verticalAssistLimit = 0.7;
 
     // landing tolerances
     this.maxVspd = 6.0;
@@ -37,18 +35,20 @@ export class Physics {
     // Gravity
     rocket.vel.y -= this.gravity * dt;
 
-    // Side-scroller forward drift with some braking when steering hard left.
-    const brakeFactor = 1 - Math.max(0, -steer) * 0.45;
-    const autoScrollX = (this.autoScrollBase + (input.thrustHeld ? this.autoScrollThrustBonus : 0)) * brakeFactor;
-    const windTargetX = this.wind * 1.15 + autoScrollX;
-    const targetVx = windTargetX + steer * this.steerTargetSpeed * (1 + steerMag * 0.18);
+    const steerInput = clamp(steer, -1.2, 1.2);
+    const pitchInput = clamp(pitch, -1.0, 1.0);
+
+    // No auto-forward movement: only user input + wind drives horizontal speed.
+    const windTargetX = this.wind * 1.15;
+    const targetVx = windTargetX + steerInput * this.steerTargetSpeed * (1 + steerMag * 0.12);
 
     // Hidden depth is de-emphasized; keep only a small trim for a bit of parallax.
-    const targetVz = (-pitch) * this.pitchTargetSpeed;
+    const targetVz = (-pitchInput) * this.pitchTargetSpeed;
 
     // Map up/down into visible vertical motion so controls feel like a side scroller.
     const verticalTrim = this.verticalTrimAccel + (input.thrustHeld ? this.verticalTrimThrustBonus : 0);
-    rocket.vel.y += pitch * verticalTrim * dt;
+    const verticalAssist = clamp(pitchInput, -this.verticalAssistLimit, this.verticalAssistLimit);
+    rocket.vel.y += verticalAssist * verticalTrim * dt;
 
     const steerResponse = this.steerResponse + steerMag * 2.2;
     const pitchResponse = this.pitchResponse + pitchMag * 1.5;
@@ -59,10 +59,15 @@ export class Physics {
     rocket.vel.z += (targetVz - rocket.vel.z) * pitchBlend;
 
     // Keep hidden-depth drift from accumulating; this is primarily a 2D lane.
-    rocket.vel.z *= Math.exp(-3.4 * dt);
+    rocket.vel.z *= Math.exp(-5.8 * dt);
+
+    // Gentle vertical damping helps up/down trim feel silky instead of springy/violent.
+    const verticalCenter = clamp(1 - pitchMag / 0.9, 0, 1);
+    const verticalDamp = this.verticalCenterDamping * verticalCenter + (input.thrustHeld ? 0.12 : 0.22);
+    rocket.vel.y *= Math.exp(-verticalDamp * dt);
 
     // Extra damping near center so the rocket settles instead of sliding forever.
-    const nearCenter = Math.max(0, 1 - Math.max(steerMag, pitchMag) / 0.28);
+    const nearCenter = Math.max(0, 1 - Math.max(steerMag, pitchMag) / 0.45);
     const damping = (input.thrustHeld ? this.thrustDriftDamping : this.freeDriftDamping) * nearCenter;
     if (damping > 0) {
       const drag = Math.exp(-damping * dt);

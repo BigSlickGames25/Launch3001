@@ -46,7 +46,7 @@ export class Game {
     this.best = Number(localStorage.getItem("launcher_best") || "0");
 
     this.state = "READY"; // READY | FLYING_SIDE | FINISH_3D | LANDED | CRASHED | LEVEL_TRANSITION
-    this.sensitivityScale = 1.8;
+    this.sensitivityScale = 1.2;
     this.gravityScale = 1.0;
 
     this._finishCamBlend = 0;

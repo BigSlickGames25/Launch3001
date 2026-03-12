@@ -10,5 +10,6 @@ Converted files currently present:
 - rocket.glb
 - launchpad.glb
 
-The current Launch prototype still uses 2D placeholders because the gameplay
-view is not yet rendering these 3D assets at runtime.
+Current runtime usage:
+- native gameplay renders the GLB files through the 3D model layer
+- web gameplay still uses the 2D fallback renderer

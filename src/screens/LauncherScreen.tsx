@@ -28,7 +28,7 @@ export function LauncherScreen() {
           title="Camera Behavior"
         />
         <InfoCard
-          body="Rocket.obj, Rocket.mtl, Launchpad.obj, Launchpad.mtl, rocket.glb, and launchpad.glb are present. The current prototype still uses 2D stand-ins because gameplay has not been moved onto a 3D render path yet."
+          body="Rocket.obj, Rocket.mtl, Launchpad.obj, Launchpad.mtl, rocket.glb, and launchpad.glb are present. Native gameplay now renders the GLB assets through an Expo GL and Three.js model layer. Web still uses the 2D fallback renderer."
           title="Asset Pipeline"
         />
         <InfoCard

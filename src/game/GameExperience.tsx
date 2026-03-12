@@ -17,6 +17,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import { SteeringSlider } from "../components/controls/SteeringSlider";
 import { ThrustButton } from "../components/controls/ThrustButton";
+import { ModelSprite } from "../components/game/ModelSprite";
 import { AppBackdrop } from "../components/layout/AppBackdrop";
 import { useGameLoop } from "../engine/useGameLoop";
 import { useDeviceProfile } from "../hooks/useDeviceProfile";
@@ -30,7 +31,6 @@ import {
   LandingMetrics,
   LevelSectionKind,
   Obstacle,
-  Pad,
   Star,
   Vector
 } from "./types";
@@ -147,6 +147,8 @@ function formatLandingMetrics(metrics: LandingMetrics | null) {
 
   return `H ${metrics.horizontalSpeed}  V ${metrics.verticalSpeed}  A ${metrics.angleDegrees} deg`;
 }
+
+const ROCKET_BOX_RATIO = 0.68;
 
 export function GameExperience() {
   const device = useDeviceProfile();
@@ -674,8 +676,36 @@ function Arena({ world }: { world: GameWorld }) {
   );
   const rocketPoint = projectPoint(world.rocket.position, world.camera, world.arena);
   const rocketScale = clamp(world.camera.zoom * 1.02, 0.86, 1.28);
-  const rocketWidth = world.rocket.width * rocketScale;
-  const rocketHeight = world.rocket.height * rocketScale;
+  const rocketHeight = clamp(world.rocket.height * rocketScale * 1.52, 72, 168);
+  const rocketWidth = rocketHeight * ROCKET_BOX_RATIO;
+  const startPadWidth = clamp(
+    world.level.startPad.width * world.camera.zoom * 1.34,
+    104,
+    250
+  );
+  const finishPadWidth = clamp(
+    world.level.finishPad.width * world.camera.zoom * 1.42,
+    104,
+    250
+  );
+  const startPadHeight = clamp(startPadWidth * 0.44, 46, 118);
+  const finishPadHeight = clamp(finishPadWidth * 0.44, 46, 118);
+  const startPadCenter = projectPoint(
+    {
+      x: world.level.startPad.position.x,
+      y: world.level.startPad.position.y - world.level.startPad.height * 0.42
+    },
+    world.camera,
+    world.arena
+  );
+  const finishPadCenter = projectPoint(
+    {
+      x: world.level.finishPad.position.x,
+      y: world.level.finishPad.position.y - world.level.finishPad.height * 0.42
+    },
+    world.camera,
+    world.arena
+  );
 
   return (
     <View style={styles.arena}>
@@ -774,101 +804,36 @@ function Arena({ world }: { world: GameWorld }) {
           />
         );
       })}
-      <PadSprite arena={world.arena} camera={world.camera} pad={world.level.startPad} />
-      <PadSprite arena={world.arena} camera={world.camera} pad={world.level.finishPad} />
-      <View
-        style={[
-          styles.rocket,
-          {
-            height: rocketHeight,
-            left: rocketPoint.x - rocketWidth / 2,
-            top: rocketPoint.y - rocketHeight * 0.48,
-            transform: [{ rotate: `${world.rocket.angle}rad` }],
-            width: rocketWidth
-          }
-        ]}
-      >
-        {world.rocket.thrusting ? (
-          <View
-            style={[
-              styles.rocketFlame,
-              {
-                height: 20 * rocketScale,
-                top: rocketHeight - 4,
-                width: 18 * rocketScale
-              }
-            ]}
-          />
-        ) : null}
-        <View style={[styles.rocketBody, { borderRadius: 14 * rocketScale }]} />
-        <View
-          style={[
-            styles.rocketWindow,
-            { height: 8 * rocketScale, width: 8 * rocketScale }
-          ]}
-        />
-        <View
-          style={[
-            styles.rocketFinLeft,
-            {
-              borderBottomWidth: 14 * rocketScale,
-              borderLeftWidth: 10 * rocketScale
-            }
-          ]}
-        />
-        <View
-          style={[
-            styles.rocketFinRight,
-            {
-              borderBottomWidth: 14 * rocketScale,
-              borderRightWidth: 10 * rocketScale
-            }
-          ]}
-        />
-      </View>
+      <ModelSprite
+        height={startPadHeight}
+        kind="launchpad"
+        label="START"
+        left={startPadCenter.x - startPadWidth / 2}
+        top={startPadCenter.y - startPadHeight / 2}
+        width={startPadWidth}
+      />
+      <ModelSprite
+        height={finishPadHeight}
+        kind="launchpad"
+        label="LAND"
+        left={finishPadCenter.x - finishPadWidth / 2}
+        top={finishPadCenter.y - finishPadHeight / 2}
+        width={finishPadWidth}
+      />
+      <ModelSprite
+        height={rocketHeight}
+        kind="rocket"
+        left={rocketPoint.x - rocketWidth / 2}
+        rotation={world.rocket.angle}
+        thrusting={world.rocket.thrusting}
+        top={rocketPoint.y - rocketHeight * 0.48}
+        width={rocketWidth}
+      />
       <View style={styles.banner}>
         <Text style={styles.bannerLabel}>{formatSectionLabel(world.currentSectionKind)}</Text>
         <Text style={styles.bannerCopy}>{world.message}</Text>
       </View>
       <View style={[styles.progressBar, { width: `${Math.max(6, world.progress * 100)}%` }]} />
-    </View>
-  );
-}
-
-function PadSprite({
-  arena,
-  camera,
-  pad
-}: {
-  arena: { height: number; width: number };
-  camera: Camera;
-  pad: Pad;
-}) {
-  const topLeft = projectPoint(
-    {
-      x: pad.position.x - pad.width / 2,
-      y: pad.position.y - pad.height
-    },
-    camera,
-    arena
-  );
-  const width = pad.width * camera.zoom;
-  const height = (pad.height + 6) * camera.zoom;
-
-  return (
-    <View
-      style={[
-        styles.pad,
-        pad.kind === "finish" ? styles.padFinish : styles.padStart,
-        {
-          height,
-          left: topLeft.x,
-          top: topLeft.y,
-          width
-        }
-      ]}
-    >
-      <Text style={styles.padText}>{pad.kind === "finish" ? "LAND" : "START"}</Text>
     </View>
   );
 }

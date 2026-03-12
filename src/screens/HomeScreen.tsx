@@ -72,16 +72,16 @@ export function HomeScreen() {
           <Text style={styles.notesText}>
             Gameplay, level flow, crash rules, and camera behavior are live.
             The source rocket and launchpad models are in the repo now, along
-            with converted GLB versions. The prototype still renders clean 2D
-            stand-ins because the current stack does not yet have a 3D runtime
-            path wired into gameplay.
+            with converted GLB versions. Native gameplay now renders those
+            models in the flight view. Web keeps the clean 2D stand-ins so the
+            browser path stays lightweight and stable.
           </Text>
           <Text style={styles.notesMeta}>
             Expected source files: Rocket.obj, Rocket.mtl, Launchpad.obj,
             Launchpad.mtl
           </Text>
           <Text style={styles.notesMeta}>
-            Current converted files: rocket.glb and launchpad.glb
+            Runtime path: native GLB render, web 2D fallback
           </Text>
         </View>
       </View>

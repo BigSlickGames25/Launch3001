@@ -45,7 +45,7 @@ export function HowToPlayScreen() {
         wide={isWide}
       />
       <InfoCard
-        body="This checkout is missing Rocket.obj, Rocket.mtl, Launchpad.obj, and Launchpad.mtl, so the prototype renders placeholders. Convert those assets to GLB or GLTF and swap them into the render layer next."
+        body="Rocket.obj, Rocket.mtl, Launchpad.obj, Launchpad.mtl, rocket.glb, and launchpad.glb are in the repo. The prototype still renders placeholders because the gameplay view is 2D today and does not yet host a 3D renderer."
         compact={isCompact}
         title="Asset Note"
         wide={isWide}

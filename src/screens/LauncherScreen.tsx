@@ -28,7 +28,7 @@ export function LauncherScreen() {
           title="Camera Behavior"
         />
         <InfoCard
-          body="Current render layer uses stylized 2D placeholders because the expected source models are not present in this checkout. Convert Rocket.obj plus Rocket.mtl to rocket.glb, and Launchpad.obj plus Launchpad.mtl to launchpad.glb when the assets are available."
+          body="Rocket.obj, Rocket.mtl, Launchpad.obj, Launchpad.mtl, rocket.glb, and launchpad.glb are present. The current prototype still uses 2D stand-ins because gameplay has not been moved onto a 3D render path yet."
           title="Asset Pipeline"
         />
         <InfoCard

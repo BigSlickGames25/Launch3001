@@ -1,14 +1,14 @@
 Place converted gameplay models here.
 
-Expected source assets from the art handoff:
+Source assets from the art handoff:
 - Rocket.obj
 - Rocket.mtl
 - Launchpad.obj
 - Launchpad.mtl
 
-Next conversion step for this prototype:
-- convert `Rocket.obj` + `Rocket.mtl` to `rocket.glb`
-- convert `Launchpad.obj` + `Launchpad.mtl` to `launchpad.glb`
+Converted files currently present:
+- rocket.glb
+- launchpad.glb
 
-The current Launch prototype uses 2D placeholders until those GLB or GLTF
-assets are available in this folder.
+The current Launch prototype still uses 2D placeholders because the gameplay
+view is not yet rendering these 3D assets at runtime.

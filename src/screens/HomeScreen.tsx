@@ -71,16 +71,17 @@ export function HomeScreen() {
           <Text style={styles.notesTitle}>Prototype Status</Text>
           <Text style={styles.notesText}>
             Gameplay, level flow, crash rules, and camera behavior are live.
-            The current checkout does not include the expected rocket and
-            launchpad source models, so the game is rendering clean
-            placeholders until GLB or GLTF assets are dropped in.
+            The source rocket and launchpad models are in the repo now, along
+            with converted GLB versions. The prototype still renders clean 2D
+            stand-ins because the current stack does not yet have a 3D runtime
+            path wired into gameplay.
           </Text>
           <Text style={styles.notesMeta}>
             Expected source files: Rocket.obj, Rocket.mtl, Launchpad.obj,
             Launchpad.mtl
           </Text>
           <Text style={styles.notesMeta}>
-            Next asset step: convert to rocket.glb and launchpad.glb
+            Current converted files: rocket.glb and launchpad.glb
           </Text>
         </View>
       </View>

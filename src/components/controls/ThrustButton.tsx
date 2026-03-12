@@ -31,10 +31,18 @@ export function ThrustButton({
           pressed && styles.buttonPressed
         ]}
       >
-        <Text style={styles.label}>Thrust</Text>
-        <Text style={styles.subLabel}>Hold</Text>
+        <Text selectable={false} style={styles.label}>
+          Thrust
+        </Text>
+        <Text selectable={false} style={styles.subLabel}>
+          Hold
+        </Text>
       </Pressable>
-      {showGuide ? <Text style={styles.caption}>Tap and hold for burn</Text> : null}
+      {showGuide ? (
+        <Text selectable={false} style={styles.caption}>
+          Tap and hold for burn
+        </Text>
+      ) : null}
     </View>
   );
 }
@@ -56,7 +64,9 @@ const styles = StyleSheet.create({
       width: 0
     },
     shadowOpacity: 0.28,
-    shadowRadius: 24
+    shadowRadius: 24,
+    touchAction: "none",
+    userSelect: "none"
   },
   buttonActive: {
     backgroundColor: theme.colors.surfacePressed,

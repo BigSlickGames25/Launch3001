@@ -196,24 +196,44 @@ export function GameExperience() {
     const { body, documentElement } = document;
     const previousHtmlOverflow = documentElement.style.overflow;
     const previousHtmlOverscroll = documentElement.style.overscrollBehavior;
+    const previousHtmlUserSelect = documentElement.style.userSelect;
     const previousBodyOverflow = body.style.overflow;
     const previousBodyOverscroll = body.style.overscrollBehavior;
     const previousBodyTouchAction = body.style.touchAction;
     const previousBodyPosition = body.style.position;
     const previousBodyInset = body.style.inset;
     const previousBodyWidth = body.style.width;
+    const previousBodyUserSelect = body.style.userSelect;
+    const previousHtmlWebkitUserSelect = documentElement.style.getPropertyValue(
+      "-webkit-user-select"
+    );
+    const previousBodyWebkitUserSelect = body.style.getPropertyValue(
+      "-webkit-user-select"
+    );
+    const previousHtmlTouchCallout = documentElement.style.getPropertyValue(
+      "-webkit-touch-callout"
+    );
+    const previousBodyTouchCallout = body.style.getPropertyValue(
+      "-webkit-touch-callout"
+    );
     const preventTouchDefault = (event: Event) => {
       event.preventDefault();
     };
 
     documentElement.style.overflow = "hidden";
     documentElement.style.overscrollBehavior = "none";
+    documentElement.style.userSelect = "none";
+    documentElement.style.setProperty("-webkit-user-select", "none");
+    documentElement.style.setProperty("-webkit-touch-callout", "none");
     body.style.overflow = "hidden";
     body.style.overscrollBehavior = "none";
     body.style.touchAction = "none";
     body.style.position = "fixed";
     body.style.inset = "0";
+    body.style.userSelect = "none";
     body.style.width = "100%";
+    body.style.setProperty("-webkit-user-select", "none");
+    body.style.setProperty("-webkit-touch-callout", "none");
     window.scrollTo(0, 0);
     document.addEventListener("touchmove", preventTouchDefault, {
       passive: false
@@ -222,12 +242,24 @@ export function GameExperience() {
     return () => {
       documentElement.style.overflow = previousHtmlOverflow;
       documentElement.style.overscrollBehavior = previousHtmlOverscroll;
+      documentElement.style.userSelect = previousHtmlUserSelect;
+      documentElement.style.setProperty(
+        "-webkit-user-select",
+        previousHtmlWebkitUserSelect
+      );
+      documentElement.style.setProperty(
+        "-webkit-touch-callout",
+        previousHtmlTouchCallout
+      );
       body.style.overflow = previousBodyOverflow;
       body.style.overscrollBehavior = previousBodyOverscroll;
       body.style.touchAction = previousBodyTouchAction;
       body.style.position = previousBodyPosition;
       body.style.inset = previousBodyInset;
+      body.style.userSelect = previousBodyUserSelect;
       body.style.width = previousBodyWidth;
+      body.style.setProperty("-webkit-user-select", previousBodyWebkitUserSelect);
+      body.style.setProperty("-webkit-touch-callout", previousBodyTouchCallout);
       document.removeEventListener("touchmove", preventTouchDefault);
     };
   }, []);
@@ -847,7 +879,8 @@ const styles = StyleSheet.create({
     flex: 1,
     overflow: "hidden",
     overscrollBehavior: "none",
-    touchAction: "none"
+    touchAction: "none",
+    userSelect: "none"
   },
   safeArea: {
     flex: 1,

@@ -49,8 +49,8 @@ export function SettingsScreen() {
       >
         <Text style={styles.sectionTitle}>Device posture</Text>
         <Text style={styles.sectionText}>
-          Rotation is applied app-wide so the game shell and menus stay
-          consistent with your chosen play mode.
+          Orientation changes the feel of Launch because tilt steering is tied
+          to how you hold the device. Pick the posture you want for the run.
         </Text>
         <OptionGroup
           onChange={(value) =>
@@ -70,7 +70,8 @@ export function SettingsScreen() {
       >
         <Text style={styles.sectionTitle}>Feedback</Text>
         <Text style={styles.sectionText}>
-          Tune system haptics for menus, pickups, hits, and state changes.
+          Tune haptics for thrust engagement, crash states, pauses, and level
+          transitions.
         </Text>
         <OptionGroup
           onChange={(value) =>
@@ -90,8 +91,8 @@ export function SettingsScreen() {
       >
         <Text style={styles.sectionTitle}>Touch layout</Text>
         <Text style={styles.sectionText}>
-          Swap the joystick and action cluster for left-handed or right-handed
-          play.
+          Choose which side holds the thrust control. Tilt remains the primary
+          steering path, with touch steering only used as a fallback.
         </Text>
         <OptionGroup
           onChange={(value) =>
@@ -139,7 +140,7 @@ export function SettingsScreen() {
       >
         <Text style={styles.sectionTitle}>Reset</Text>
         <Text style={styles.sectionText}>
-          Restore template defaults before you branch this into a specific game.
+          Restore Launch defaults for orientation, feedback, and control labels.
         </Text>
         <Text onPress={resetSettings} style={styles.resetButton}>
           Reset settings

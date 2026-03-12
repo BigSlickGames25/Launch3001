@@ -1,4 +1,3 @@
-import { LinearGradient } from "expo-linear-gradient";
 import { Href, router } from "expo-router";
 import { activateKeepAwakeAsync, deactivateKeepAwake } from "expo-keep-awake";
 import { useEffect, useRef, useState } from "react";
@@ -10,18 +9,144 @@ import {
   Text,
   View
 } from "react-native";
+import {
+  SensorType,
+  useAnimatedSensor
+} from "react-native-reanimated";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import { SteeringSlider } from "../components/controls/SteeringSlider";
+import { ThrustButton } from "../components/controls/ThrustButton";
 import { AppBackdrop } from "../components/layout/AppBackdrop";
 import { useGameLoop } from "../engine/useGameLoop";
 import { useDeviceProfile } from "../hooks/useDeviceProfile";
 import { fireHaptic } from "../services/haptics";
 import { useGameSettings } from "../store/game-settings";
 import { clamp, theme } from "../theme";
-import { GameInput, GameWorld, Obstacle, Pad, Vector } from "./types";
-import { createWorld, resizeWorld, updateWorld } from "./world";
+import {
+  Camera,
+  GameInput,
+  GameWorld,
+  LandingMetrics,
+  LevelSectionKind,
+  Obstacle,
+  Pad,
+  Star,
+  Vector
+} from "./types";
+import {
+  createWorld,
+  getLandingThresholds,
+  resizeWorld,
+  updateWorld
+} from "./world";
 
-const RAD_TO_DEG = 57.2958;
+function formatSectionLabel(kind: LevelSectionKind) {
+  switch (kind) {
+    case "launch":
+      return "Launch";
+    case "space":
+      return "Open Space";
+    case "hangar":
+      return "Hangar";
+    case "rock":
+      return "Rock Tunnel";
+    case "needle":
+      return "Needle Route";
+    case "landing":
+      return "Landing";
+  }
+}
+
+function projectPoint(
+  point: Vector,
+  camera: Camera,
+  arena: { height: number; width: number }
+) {
+  return {
+    x: (point.x - camera.center.x) * camera.zoom + arena.width / 2,
+    y: (point.y - camera.center.y) * camera.zoom + arena.height / 2
+  };
+}
+
+function obstacleColor(obstacle: Obstacle) {
+  switch (obstacle.kind) {
+    case "hangar":
+      return "rgba(111, 163, 255, 0.26)";
+    case "rock":
+      return "rgba(255, 151, 89, 0.3)";
+    case "gate":
+      return "rgba(255, 255, 255, 0.2)";
+    case "platform":
+      return "rgba(80, 135, 255, 0.26)";
+    case "terrain":
+      return "rgba(18, 38, 70, 0.92)";
+  }
+}
+
+function obstacleBorderColor(obstacle: Obstacle) {
+  switch (obstacle.kind) {
+    case "hangar":
+      return "rgba(160, 201, 255, 0.56)";
+    case "rock":
+      return "rgba(255, 187, 139, 0.62)";
+    case "gate":
+      return "rgba(255, 255, 255, 0.4)";
+    case "platform":
+      return "rgba(120, 183, 255, 0.54)";
+    case "terrain":
+      return "rgba(80, 132, 222, 0.22)";
+  }
+}
+
+function sectionBackdrop(kind: LevelSectionKind) {
+  switch (kind) {
+    case "launch":
+      return "rgba(56, 189, 248, 0.06)";
+    case "space":
+      return "rgba(56, 189, 248, 0.04)";
+    case "hangar":
+      return "rgba(130, 150, 255, 0.06)";
+    case "rock":
+      return "rgba(249, 115, 22, 0.06)";
+    case "needle":
+      return "rgba(251, 113, 133, 0.06)";
+    case "landing":
+      return "rgba(249, 115, 22, 0.08)";
+  }
+}
+
+function starColor(star: Star) {
+  switch (star.tone) {
+    case "amber":
+      return `rgba(255, 178, 112, ${star.alpha})`;
+    case "blue":
+      return `rgba(125, 199, 255, ${star.alpha})`;
+    case "white":
+      return `rgba(255, 255, 255, ${star.alpha})`;
+  }
+}
+
+function getRawTiltAxis(
+  reading: { pitch?: number; roll?: number } | undefined,
+  isLandscape: boolean
+) {
+  if (!reading) {
+    return null;
+  }
+
+  const axis = isLandscape ? -(reading.pitch ?? 0) : reading.roll ?? 0;
+
+  return Number.isFinite(axis) ? axis : null;
+}
+
+function formatLandingMetrics(metrics: LandingMetrics | null) {
+  if (!metrics) {
+    return null;
+  }
+
+  return `H ${metrics.horizontalSpeed}  V ${metrics.verticalSpeed}  A ${metrics.angleDegrees} deg`;
+}
 
 export function GameExperience() {
   const device = useDeviceProfile();
@@ -29,11 +154,27 @@ export function GameExperience() {
   const [arenaSize, setArenaSize] = useState({ width: 0, height: 0 });
   const [world, setWorld] = useState<GameWorld | null>(null);
   const [paused, setPaused] = useState(false);
-  const [thrustPressed, setThrustPressed] = useState(false);
+  const [runBestLevel, setRunBestLevel] = useState(1);
+  const [thrustActive, setThrustActive] = useState(false);
+  const [touchSteer, setTouchSteer] = useState(0);
   const inputRef = useRef<GameInput>({
-    tap: false,
+    steer: 0,
     thrust: false
   });
+  const tiltTrimRef = useRef<number | null>(null);
+  const rotationSensor = useAnimatedSensor(SensorType.ROTATION, {
+    adjustToInterfaceOrientation: true,
+    interval: 16
+  });
+  const isLandscape = device.isLandscape;
+  const thrustSize = Math.round(
+    clamp((isLandscape ? 124 : 138) * device.controlScale, 112, 154)
+  );
+  const fallbackSliderSize = Math.round(
+    clamp((isLandscape ? 190 : 156) * device.controlScale, 148, 212)
+  );
+  const usingTouchFallback = !rotationSensor.isAvailable;
+  const thresholds = getLandingThresholds(world?.levelNumber ?? 1);
 
   useEffect(() => {
     if (settings.keepAwake) {
@@ -61,7 +202,6 @@ export function GameExperience() {
     const previousBodyPosition = body.style.position;
     const previousBodyInset = body.style.inset;
     const previousBodyWidth = body.style.width;
-
     const preventTouchDefault = (event: Event) => {
       event.preventDefault();
     };
@@ -103,37 +243,59 @@ export function GameExperience() {
   }, [arenaSize.height, arenaSize.width]);
 
   useEffect(() => {
+    if (!world) {
+      return;
+    }
+
+    if (world.levelNumber > runBestLevel) {
+      setRunBestLevel(world.levelNumber);
+    }
+  }, [runBestLevel, world]);
+
+  useEffect(() => {
     if (!world || world.event === "none") {
       return;
     }
 
     switch (world.event) {
-      case "launch":
-        void fireHaptic(settings.haptics, "boost");
-        break;
-      case "level-complete":
-      case "campaign-complete":
-        void fireHaptic(settings.haptics, "confirm");
-        break;
       case "crash":
         void fireHaptic(settings.haptics, "damage");
+        break;
+      case "landing":
+      case "level-complete":
+        void fireHaptic(settings.haptics, "collect");
+        break;
+      case "run-complete":
+        void fireHaptic(settings.haptics, "confirm");
         break;
     }
   }, [settings.haptics, world?.event, world?.eventNonce]);
 
   useEffect(() => {
-    if (!paused && !world?.gameOver) {
+    if (!rotationSensor.isAvailable) {
       return;
     }
 
-    inputRef.current = {
-      tap: false,
-      thrust: false
-    };
-    setThrustPressed(false);
-  }, [paused, world?.gameOver]);
+    const rawAxis = getRawTiltAxis(rotationSensor.sensor.value, isLandscape);
 
-  useGameLoop(Boolean(world) && !paused && !world?.gameOver, (deltaSeconds) => {
+    if (rawAxis !== null) {
+      tiltTrimRef.current = rawAxis;
+    }
+  }, [isLandscape, rotationSensor.isAvailable]);
+
+  useGameLoop(Boolean(world) && !paused && world?.status === "playing", (deltaSeconds) => {
+    const rawAxis = getRawTiltAxis(rotationSensor.sensor.value, isLandscape);
+
+    if (rawAxis !== null) {
+      if (tiltTrimRef.current === null) {
+        tiltTrimRef.current = rawAxis;
+      }
+
+      inputRef.current.steer = clamp((rawAxis - tiltTrimRef.current) / 0.58, -1, 1);
+    } else {
+      inputRef.current.steer = touchSteer;
+    }
+
     setWorld((current) => {
       if (!current) {
         return current;
@@ -141,14 +303,35 @@ export function GameExperience() {
 
       return updateWorld(current, inputRef.current, deltaSeconds);
     });
-
-    if (inputRef.current.tap) {
-      inputRef.current = {
-        ...inputRef.current,
-        tap: false
-      };
-    }
   });
+
+  function recalibrateTilt() {
+    const rawAxis = getRawTiltAxis(rotationSensor.sensor.value, isLandscape);
+
+    if (rawAxis !== null) {
+      tiltTrimRef.current = rawAxis;
+    }
+  }
+
+  function resetControls() {
+    inputRef.current = {
+      steer: 0,
+      thrust: false
+    };
+    setTouchSteer(0);
+    setThrustActive(false);
+  }
+
+  function startLevel(levelNumber: number) {
+    if (!arenaSize.width || !arenaSize.height) {
+      return;
+    }
+
+    resetControls();
+    recalibrateTilt();
+    setPaused(false);
+    setWorld(createWorld(arenaSize, levelNumber));
+  }
 
   function handleArenaLayout(event: LayoutChangeEvent) {
     const { height, width } = event.nativeEvent.layout;
@@ -165,15 +348,11 @@ export function GameExperience() {
     });
   }
 
-  function resetInputState() {
-    inputRef.current = {
-      tap: false,
-      thrust: false
-    };
-    setThrustPressed(false);
-  }
-
   function handlePauseToggle() {
+    if (!world || world.status !== "playing") {
+      return;
+    }
+
     void fireHaptic(settings.haptics, "pause");
     setPaused((current) => !current);
   }
@@ -183,57 +362,84 @@ export function GameExperience() {
       return;
     }
 
-    if (paused && !world.gameOver) {
+    if (paused && world.status === "playing") {
+      void fireHaptic(settings.haptics, "tap");
       setPaused(false);
       return;
     }
 
-    if (!arenaSize.width || !arenaSize.height) {
+    void fireHaptic(settings.haptics, "confirm");
+
+    if (world.status === "level-complete") {
+      startLevel(world.levelNumber + 1);
       return;
     }
 
-    const nextLevel =
-      world.status === "landed" ? world.currentLevel + 1 : 1;
-
-    void fireHaptic(settings.haptics, "confirm");
-    setPaused(false);
-    resetInputState();
-    setWorld(createWorld(arenaSize, nextLevel));
+    startLevel(1);
+    setRunBestLevel(1);
   }
 
   function leaveGame() {
-    resetInputState();
+    resetControls();
     void fireHaptic(settings.haptics, "tap");
     router.replace("/" as Href);
   }
 
-  function handleThrustStart() {
-    if (!world || paused || world.gameOver) {
-      return;
-    }
-
-    setThrustPressed(true);
-    inputRef.current = {
-      tap: true,
-      thrust: true
-    };
-  }
-
-  function handleThrustEnd() {
-    setThrustPressed(false);
-    inputRef.current = {
-      ...inputRef.current,
-      thrust: false
-    };
-  }
-
-  const distanceToPad = world
-    ? Math.max(0, Math.round((world.levelData.goalPad.x - world.rocket.position.x) / 10))
+  const speed = world
+    ? Math.round(Math.hypot(world.rocket.velocity.x, world.rocket.velocity.y))
     : 0;
-  const verticalSpeed = world ? Math.round(Math.abs(world.rocket.velocity.y)) : 0;
-  const isWide = device.isLandscape || device.width >= 960;
-  const arenaHeight = Math.round(clamp(device.height * 0.72, 420, 860));
-  const accentColor = world?.levelData.accentColor ?? theme.colors.accent;
+  const steerValue = inputRef.current.steer;
+
+  function renderStatusCard() {
+    return (
+      <ControlStatus
+        onRecalibrate={rotationSensor.isAvailable ? recalibrateTilt : undefined}
+        sectionKind={world?.currentSectionKind ?? "launch"}
+        showGuide={settings.showTouchGuide}
+        steerValue={steerValue}
+        usingTouchFallback={usingTouchFallback}
+      >
+        {usingTouchFallback ? (
+          <SteeringSlider
+            onChange={(value) => {
+              setTouchSteer(value);
+              inputRef.current.steer = value;
+            }}
+            showGuide={settings.showTouchGuide}
+            size={fallbackSliderSize}
+            value={touchSteer}
+          />
+        ) : null}
+      </ControlStatus>
+    );
+  }
+
+  function renderThrustButton() {
+    return (
+      <ThrustButton
+        active={thrustActive}
+        onPressIn={() => {
+          if (!inputRef.current.thrust) {
+            void fireHaptic(settings.haptics, "boost");
+          }
+
+          inputRef.current.thrust = true;
+          setThrustActive(true);
+        }}
+        onPressOut={() => {
+          inputRef.current.thrust = false;
+          setThrustActive(false);
+        }}
+        showGuide={settings.showTouchGuide}
+        size={thrustSize}
+      />
+    );
+  }
+
+  const leftRail =
+    settings.handPreference === "left" ? renderStatusCard() : renderThrustButton();
+  const rightRail =
+    settings.handPreference === "left" ? renderThrustButton() : renderStatusCard();
 
   return (
     <View style={styles.root}>
@@ -242,125 +448,138 @@ export function GameExperience() {
         edges={["top", "bottom", "left", "right"]}
         style={styles.safeArea}
       >
-        <View style={styles.shell}>
-          <View style={[styles.header, isWide && styles.headerWide]}>
-            <View style={styles.metricsRow}>
-              <MetricCard label="Sector" value={world ? `${world.currentLevel}/30` : "--"} />
-              <MetricCard label="Distance" value={world ? `${distanceToPad}m` : "--"} />
-              <MetricCard label="V-Speed" value={world ? `${verticalSpeed}` : "--"} />
-              <MetricCard
-                accentColor={accentColor}
-                label="Safe Burn"
-                value={world ? `${world.safeLandingSpeed}` : "--"}
-              />
-            </View>
-            <View style={styles.headerButtons}>
-              <HeaderButton label="Menu" onPress={leaveGame} />
-              <HeaderButton
-                label={paused ? "Resume" : "Pause"}
-                onPress={handlePauseToggle}
-              />
-            </View>
+        <View style={[styles.gameShell, isLandscape && styles.gameShellLandscape]}>
+          <View style={[styles.header, isLandscape && styles.headerLandscape]}>
+            <MetricBlock label="Level" value={`${world?.levelNumber ?? 1}/30`} />
+            <MetricBlock label="Best Run" value={`${runBestLevel}/30`} />
+            <MetricBlock label="Speed" value={`${speed}`} />
+            <MetricBlock
+              label="Landing"
+              value={`H${thresholds.horizontalSpeed} V${thresholds.verticalSpeed} A${thresholds.angleDegrees}deg`}
+            />
+            <Pressable
+              onPress={handlePauseToggle}
+              style={({ pressed }) => [
+                styles.pauseButton,
+                pressed && styles.pauseButtonPressed
+              ]}
+            >
+              <Text style={styles.pauseLabel}>{paused ? "Resume" : "Pause"}</Text>
+            </Pressable>
           </View>
 
-          <View
-            onLayout={handleArenaLayout}
-            style={[styles.arenaShell, { minHeight: arenaHeight }]}
-          >
-            {world ? (
-              <>
-                <FlightArena thrustPressed={thrustPressed} world={world} />
-                <Pressable
-                  disabled={paused || world.gameOver}
-                  onPressIn={handleThrustStart}
-                  onPressOut={handleThrustEnd}
-                  style={styles.touchSurface}
+          {isLandscape ? (
+            <View style={styles.landscapeSession}>
+              <View style={[styles.landscapeRail, styles.landscapeRailLeft]}>
+                {leftRail}
+              </View>
+              <View style={styles.landscapeCenterColumn}>
+                <View
+                  onLayout={handleArenaLayout}
+                  style={[styles.arenaShell, styles.arenaShellLandscape]}
                 >
-                  <View style={styles.touchSurfaceFill} />
-                </Pressable>
-                {!paused && !world.gameOver ? (
-                  <View pointerEvents="none" style={styles.touchHint}>
-                    <Text style={styles.touchHintTitle}>
-                      {world.status === "ready"
-                        ? "Tap and hold to launch."
-                        : "Tap and hold anywhere to burn upward."}
-                    </Text>
-                    <Text style={[styles.touchHintBody, { color: accentColor }]}>
-                      {world.levelData.name}
-                    </Text>
-                  </View>
+                  {world ? <Arena world={world} /> : null}
+                  {paused || world?.status !== "playing" ? (
+                    <GameOverlay
+                      onLeave={leaveGame}
+                      onPrimaryAction={handlePrimaryAction}
+                      paused={paused}
+                      world={world}
+                    />
+                  ) : null}
+                </View>
+              </View>
+              <View style={[styles.landscapeRail, styles.landscapeRailRight]}>
+                {rightRail}
+              </View>
+            </View>
+          ) : (
+            <>
+              <View onLayout={handleArenaLayout} style={styles.arenaShell}>
+                {world ? <Arena world={world} /> : null}
+                {paused || world?.status !== "playing" ? (
+                  <GameOverlay
+                    onLeave={leaveGame}
+                    onPrimaryAction={handlePrimaryAction}
+                    paused={paused}
+                    world={world}
+                  />
                 ) : null}
-              </>
-            ) : null}
-
-            {paused || world?.gameOver ? (
-              <GameOverlay
-                onLeave={leaveGame}
-                onPrimaryAction={handlePrimaryAction}
-                paused={paused}
-                world={world}
-              />
-            ) : null}
-          </View>
-
-          <View style={[styles.footer, isWide && styles.footerWide]}>
-            <Text style={styles.footerTitle}>
-              80s sci-fi run. No saves. Thirty sectors.
-            </Text>
-            <Text style={styles.footerText}>
-              {world?.status === "ready"
-                ? "Launch from the left pad, ride the camera, thread the hangars, and land softly. Any crash or hard touchdown sends the whole campaign back to Sector 1."
-                : world?.status === "running"
-                  ? "The rocket auto-drifts right. Your only job is vertical control and a soft final descent."
-                  : world?.status === "landed"
-                    ? "Sector cleared. The next launch starts immediately from a new left-side pad."
-                    : world?.status === "campaign-complete"
-                      ? "You cleared all 30 sectors in one run."
-                      : "Campaign lost. Restart from Sector 1."}
-            </Text>
-          </View>
+              </View>
+              <View style={styles.controlsRow}>
+                {leftRail}
+                {rightRail}
+              </View>
+            </>
+          )}
         </View>
       </SafeAreaView>
     </View>
   );
 }
 
-function MetricCard({
-  accentColor,
-  label,
-  value
-}: {
-  accentColor?: string;
-  label: string;
-  value: string;
-}) {
+function MetricBlock({ label, value }: { label: string; value: string }) {
   return (
-    <View style={styles.metricCard}>
-      <Text style={[styles.metricLabel, accentColor ? { color: accentColor } : null]}>
-        {label}
-      </Text>
+    <View style={styles.metricBlock}>
+      <Text style={styles.metricLabel}>{label}</Text>
       <Text style={styles.metricValue}>{value}</Text>
     </View>
   );
 }
 
-function HeaderButton({
-  label,
-  onPress
+function ControlStatus({
+  children,
+  onRecalibrate,
+  sectionKind,
+  showGuide,
+  steerValue,
+  usingTouchFallback
 }: {
-  label: string;
-  onPress: () => void;
+  children?: React.ReactNode;
+  onRecalibrate?: () => void;
+  sectionKind: LevelSectionKind;
+  showGuide?: boolean;
+  steerValue: number;
+  usingTouchFallback: boolean;
 }) {
   return (
-    <Pressable
-      onPress={onPress}
-      style={({ pressed }) => [
-        styles.headerButton,
-        pressed && styles.headerButtonPressed
-      ]}
-    >
-      <Text style={styles.headerButtonLabel}>{label}</Text>
-    </Pressable>
+    <View style={styles.controlCard}>
+      <Text style={styles.controlLabel}>
+        {usingTouchFallback ? "Touch Steering" : "Tilt Steering"}
+      </Text>
+      <Text style={styles.controlValue}>{formatSectionLabel(sectionKind)}</Text>
+      <View style={styles.steerMeter}>
+        <View style={styles.steerMeterCenter} />
+        <View
+          style={[
+            styles.steerMeterFill,
+            {
+              width: `${Math.abs(steerValue) * 50}%`,
+              left: steerValue >= 0 ? "50%" : undefined,
+              right: steerValue < 0 ? "50%" : undefined
+            }
+          ]}
+        />
+      </View>
+      <Text style={styles.controlCopy}>
+        {usingTouchFallback
+          ? "Motion sensor unavailable in this build. Drag to bias the nose."
+          : "Bank the phone to bias the rocket while the camera keeps the route readable."}
+      </Text>
+      {onRecalibrate ? (
+        <Pressable
+          onPress={onRecalibrate}
+          style={({ pressed }) => [
+            styles.trimButton,
+            pressed && styles.trimButtonPressed
+          ]}
+        >
+          <Text style={styles.trimButtonText}>Trim</Text>
+        </Pressable>
+      ) : null}
+      {children}
+      {showGuide ? <Text style={styles.controlHint}>Tilt to steer</Text> : null}
+    </View>
   );
 }
 
@@ -375,32 +594,28 @@ function GameOverlay({
   paused: boolean;
   world: GameWorld | null;
 }) {
+  const metrics = formatLandingMetrics(world?.landingMetrics ?? null);
   const title = paused
     ? "Paused"
-    : world?.status === "landed"
-      ? `Sector ${world.currentLevel} Clear`
-      : world?.status === "campaign-complete"
-        ? "Run Complete"
-        : "Campaign Lost";
+    : world?.status === "crashed"
+      ? "Rocket Lost"
+      : world?.status === "level-complete"
+        ? `Level ${world.levelNumber} Clear`
+        : "Run Complete";
   const body = paused
-    ? "The burn is frozen. Resume when you are ready."
-    : world?.status === "landed"
-      ? `Clean touchdown on ${world.levelData.name}. Continue to Sector ${
-          world.currentLevel + 1
-        }.`
-      : world?.status === "campaign-complete"
-        ? "All 30 sectors cleared in a single run. Restart to fly the full campaign again."
-        : `${world?.failureReason ?? "Hull breach."} The next run restarts at Sector 1.`;
+    ? "Launch is on hold. Resume when you want the run back live."
+    : world?.message ?? "Run state unavailable.";
   const primaryLabel = paused
     ? "Resume"
-    : world?.status === "landed"
-      ? "Next Sector"
-      : "Restart Run";
+    : world?.status === "level-complete"
+      ? `Level ${Math.min(30, (world?.levelNumber ?? 0) + 1)}`
+      : "Level 1";
 
   return (
     <View style={styles.overlay}>
       <Text style={styles.overlayTitle}>{title}</Text>
-      <Text style={styles.overlayBody}>{body}</Text>
+      <Text style={styles.overlayText}>{body}</Text>
+      {metrics ? <Text style={styles.overlayMetrics}>{metrics}</Text> : null}
       <View style={styles.overlayButtons}>
         <Pressable onPress={onPrimaryAction} style={styles.overlayPrimary}>
           <Text style={styles.overlayPrimaryText}>{primaryLabel}</Text>
@@ -413,312 +628,215 @@ function GameOverlay({
   );
 }
 
-function FlightArena({
-  thrustPressed,
-  world
-}: {
-  thrustPressed: boolean;
-  world: GameWorld;
-}) {
-  const { camera, levelData, rocket } = world;
-  const stageTranslateX =
-    world.arena.width / 2 -
-    camera.center.x * camera.zoom +
-    ((camera.zoom - 1) * levelData.width) / 2;
-  const stageTranslateY =
-    world.arena.height / 2 -
-    camera.center.y * camera.zoom +
-    ((camera.zoom - 1) * levelData.height) / 2;
-  const gridRows = [0.16, 0.32, 0.5, 0.68, 0.84];
-  const gridColumns = [0.14, 0.3, 0.46, 0.62, 0.78, 0.94];
+function Arena({ world }: { world: GameWorld }) {
+  const visibleWidth = world.arena.width / world.camera.zoom;
+  const minX = world.camera.center.x - visibleWidth / 2 - 180;
+  const maxX = world.camera.center.x + visibleWidth / 2 + 180;
+  const visibleSections = world.level.sections.filter(
+    (section) => section.endX >= minX && section.startX <= maxX
+  );
+  const visibleObstacles = world.level.obstacles.filter(
+    (obstacle) =>
+      obstacle.position.x + obstacle.size.x >= minX &&
+      obstacle.position.x <= maxX
+  );
+  const rocketPoint = projectPoint(world.rocket.position, world.camera, world.arena);
+  const rocketScale = clamp(world.camera.zoom * 1.02, 0.86, 1.28);
+  const rocketWidth = world.rocket.width * rocketScale;
+  const rocketHeight = world.rocket.height * rocketScale;
 
   return (
-    <View style={styles.viewport}>
-      <LinearGradient
-        colors={["#02050b", "#081223", "#101d39", "#050a12"]}
-        end={{ x: 1, y: 1 }}
-        start={{ x: 0, y: 0 }}
-        style={StyleSheet.absoluteFill}
-      />
-      <View style={styles.viewportOverlay} />
-      <View
-        style={[
-          styles.stage,
-          {
-            height: levelData.height,
-            transform: [
-              { translateX: stageTranslateX },
-              { translateY: stageTranslateY },
-              { scale: camera.zoom }
-            ],
-            width: levelData.width
-          }
-        ]}
-      >
-        <LinearGradient
-          colors={["#060913", "#08172d", "#050810"]}
-          end={{ x: 1, y: 1 }}
-          start={{ x: 0, y: 0 }}
-          style={StyleSheet.absoluteFill}
-        />
+    <View style={styles.arena}>
+      <View style={styles.skyGlowTop} />
+      <View style={styles.skyGlowBottom} />
+      {world.level.stars.map((star) => {
+        const screenX =
+          (star.position.x - world.camera.center.x * 0.48) *
+            world.camera.zoom *
+            0.78 +
+          world.arena.width / 2;
+        const screenY =
+          (star.position.y - world.camera.center.y * 0.2) * 0.74 +
+          world.arena.height / 2;
 
-        {gridRows.map((ratio) => (
-          <View
-            key={`row-${ratio}`}
-            style={[
-              styles.stageGridRow,
-              {
-                top: levelData.height * ratio
-              }
-            ]}
-          />
-        ))}
-        {gridColumns.map((ratio) => (
-          <View
-            key={`column-${ratio}`}
-            style={[
-              styles.stageGridColumn,
-              {
-                left: levelData.width * ratio
-              }
-            ]}
-          />
-        ))}
+        if (
+          screenX < -24 ||
+          screenX > world.arena.width + 24 ||
+          screenY < -24 ||
+          screenY > world.arena.height + 24
+        ) {
+          return null;
+        }
 
-        {levelData.stars.map((star) => (
+        return (
           <View
             key={star.id}
             style={[
               styles.star,
               {
-                height: star.size * star.depth,
-                left: star.position.x,
-                opacity: star.alpha,
-                top: star.position.y,
-                width: star.size * star.depth
-              }
-            ]}
-          />
-        ))}
-
-        <View style={styles.boundaryTop} />
-        <View style={styles.boundaryBottom} />
-
-        <CorridorGuide accentColor={levelData.accentColor} points={levelData.corridor} />
-        <PadSprite accentColor={levelData.accentColor} levelWidth={levelData.width} pad={levelData.startPad} />
-        <PadSprite accentColor={levelData.accentColor} levelWidth={levelData.width} pad={levelData.goalPad} />
-
-        {levelData.obstacles.map((obstacle) => (
-          <ObstacleSprite
-            accentColor={levelData.accentColor}
-            key={obstacle.id}
-            obstacle={obstacle}
-          />
-        ))}
-
-        <View style={styles.stageLabel}>
-          <Text style={[styles.stageLabelText, { color: levelData.accentColor }]}>
-            SECTOR {world.currentLevel.toString().padStart(2, "0")} / {levelData.name.toUpperCase()}
-          </Text>
-        </View>
-
-        <RocketSprite accentColor={levelData.accentColor} rocket={rocket} thrustPressed={thrustPressed} />
-      </View>
-    </View>
-  );
-}
-
-function CorridorGuide({
-  accentColor,
-  points
-}: {
-  accentColor: string;
-  points: Vector[];
-}) {
-  return (
-    <>
-      {points.map((point, index) => (
-        <View
-          key={`beacon-${index}`}
-          style={[
-            styles.corridorBeacon,
-            {
-              backgroundColor: accentColor,
-              left: point.x - 3,
-              opacity: 0.35,
-              top: point.y - 3
-            }
-          ]}
-        />
-      ))}
-      {points.slice(1).map((point, index) => {
-        const previous = points[index];
-        const deltaX = point.x - previous.x;
-        const deltaY = point.y - previous.y;
-        const length = Math.hypot(deltaX, deltaY);
-        const angle = Math.atan2(deltaY, deltaX) * RAD_TO_DEG;
-
-        return (
-          <View
-            key={`beam-${index}`}
-            style={[
-              styles.corridorBeam,
-              {
-                backgroundColor: accentColor,
-                left: previous.x + deltaX / 2 - length / 2,
-                opacity: 0.13,
-                top: previous.y + deltaY / 2,
-                transform: [{ rotate: `${angle}deg` }],
-                width: length
+                backgroundColor: starColor(star),
+                borderRadius: star.size,
+                height: star.size,
+                left: screenX,
+                top: screenY,
+                width: star.size
               }
             ]}
           />
         );
       })}
-    </>
-  );
-}
+      {visibleSections.map((section) => {
+        const left =
+          (section.startX - world.camera.center.x) * world.camera.zoom +
+          world.arena.width / 2;
+        const width = (section.endX - section.startX) * world.camera.zoom;
 
-function PadSprite({
-  accentColor,
-  levelWidth,
-  pad
-}: {
-  accentColor: string;
-  levelWidth: number;
-  pad: Pad;
-}) {
-  return (
-    <>
+        return (
+          <View
+            key={section.id}
+            style={[
+              styles.sectionBand,
+              {
+                backgroundColor: sectionBackdrop(section.kind),
+                left,
+                width
+              }
+            ]}
+          />
+        );
+      })}
+      <View style={styles.horizonGrid}>
+        <View style={[styles.horizonLine, styles.horizonLineTop]} />
+        <View style={[styles.horizonLine, styles.horizonLineMid]} />
+        <View style={[styles.horizonLine, styles.horizonLineBottom]} />
+      </View>
+      {visibleObstacles.map((obstacle) => {
+        const topLeft = projectPoint(obstacle.position, world.camera, world.arena);
+        const width = obstacle.size.x * world.camera.zoom;
+        const height = obstacle.size.y * world.camera.zoom;
+
+        if (
+          topLeft.x + width < -64 ||
+          topLeft.x > world.arena.width + 64 ||
+          topLeft.y + height < -64 ||
+          topLeft.y > world.arena.height + 64
+        ) {
+          return null;
+        }
+
+        return (
+          <View
+            key={obstacle.id}
+            style={[
+              styles.obstacle,
+              {
+                backgroundColor: obstacleColor(obstacle),
+                borderColor: obstacleBorderColor(obstacle),
+                borderRadius: obstacle.radius * world.camera.zoom,
+                height,
+                left: topLeft.x,
+                top: topLeft.y,
+                width
+              }
+            ]}
+          />
+        );
+      })}
+      <PadSprite arena={world.arena} camera={world.camera} pad={world.level.startPad} />
+      <PadSprite arena={world.arena} camera={world.camera} pad={world.level.finishPad} />
       <View
         style={[
-          styles.padSupport,
+          styles.rocket,
           {
-            left: pad.side === "left" ? 0 : pad.x,
-            top: pad.y + pad.height - 4,
-            width:
-              pad.side === "left" ? pad.x + pad.width : levelWidth - pad.x
-          }
-        ]}
-      />
-      <View
-        style={[
-          styles.pad,
-          {
-            borderColor: accentColor,
-            left: pad.x,
-            top: pad.y,
-            width: pad.width
-          }
-        ]}
-      />
-      <Text
-        style={[
-          styles.padLabel,
-          {
-            color: accentColor,
-            left: pad.x,
-            top: pad.y - 24
+            height: rocketHeight,
+            left: rocketPoint.x - rocketWidth / 2,
+            top: rocketPoint.y - rocketHeight * 0.48,
+            transform: [{ rotate: `${world.rocket.angle}rad` }],
+            width: rocketWidth
           }
         ]}
       >
-        {pad.label}
-      </Text>
-    </>
-  );
-}
-
-function ObstacleSprite({
-  accentColor,
-  obstacle
-}: {
-  accentColor: string;
-  obstacle: Obstacle;
-}) {
-  if (obstacle.shape === "circle") {
-    return (
-      <View
-        style={[
-          styles.rockObstacle,
-          {
-            borderColor: accentColor,
-            borderRadius: obstacle.radius,
-            height: obstacle.radius * 2,
-            left: obstacle.x - obstacle.radius,
-            top: obstacle.y - obstacle.radius,
-            width: obstacle.radius * 2
-          }
-        ]}
-      />
-    );
-  }
-
-  return (
-    <View
-      style={[
-        styles.rectObstacle,
-        obstacle.kind === "hangar" ? styles.hangarObstacle : styles.tunnelObstacle,
-        {
-          borderColor: accentColor,
-          height: obstacle.height,
-          left: obstacle.x,
-          top: obstacle.y,
-          width: obstacle.width
-        }
-      ]}
-    >
-      <View style={styles.obstacleStripe} />
-      <View style={styles.obstacleStripe} />
-      <View style={styles.obstacleStripe} />
+        {world.rocket.thrusting ? (
+          <View
+            style={[
+              styles.rocketFlame,
+              {
+                height: 20 * rocketScale,
+                top: rocketHeight - 4,
+                width: 18 * rocketScale
+              }
+            ]}
+          />
+        ) : null}
+        <View style={[styles.rocketBody, { borderRadius: 14 * rocketScale }]} />
+        <View
+          style={[
+            styles.rocketWindow,
+            { height: 8 * rocketScale, width: 8 * rocketScale }
+          ]}
+        />
+        <View
+          style={[
+            styles.rocketFinLeft,
+            {
+              borderBottomWidth: 14 * rocketScale,
+              borderLeftWidth: 10 * rocketScale
+            }
+          ]}
+        />
+        <View
+          style={[
+            styles.rocketFinRight,
+            {
+              borderBottomWidth: 14 * rocketScale,
+              borderRightWidth: 10 * rocketScale
+            }
+          ]}
+        />
+      </View>
+      <View style={styles.banner}>
+        <Text style={styles.bannerLabel}>{formatSectionLabel(world.currentSectionKind)}</Text>
+        <Text style={styles.bannerCopy}>{world.message}</Text>
+      </View>
+      <View style={[styles.progressBar, { width: `${Math.max(6, world.progress * 100)}%` }]} />
     </View>
   );
 }
 
-function RocketSprite({
-  accentColor,
-  rocket,
-  thrustPressed
+function PadSprite({
+  arena,
+  camera,
+  pad
 }: {
-  accentColor: string;
-  rocket: GameWorld["rocket"];
-  thrustPressed: boolean;
+  arena: { height: number; width: number };
+  camera: Camera;
+  pad: Pad;
 }) {
-  const size = rocket.radius * 2;
-  const rotate = `${rocket.angle * RAD_TO_DEG}deg`;
+  const topLeft = projectPoint(
+    {
+      x: pad.position.x - pad.width / 2,
+      y: pad.position.y - pad.height
+    },
+    camera,
+    arena
+  );
+  const width = pad.width * camera.zoom;
+  const height = (pad.height + 6) * camera.zoom;
 
   return (
     <View
       style={[
-        styles.rocketFrame,
+        styles.pad,
+        pad.kind === "finish" ? styles.padFinish : styles.padStart,
         {
-          height: size,
-          left: rocket.position.x - rocket.radius,
-          top: rocket.position.y - rocket.radius,
-          transform: [{ rotate }],
-          width: size
+          height,
+          left: topLeft.x,
+          top: topLeft.y,
+          width
         }
       ]}
     >
-      {rocket.thrusting || thrustPressed ? (
-        <>
-          <View
-            style={[
-              styles.engineGlow,
-              {
-                backgroundColor: accentColor
-              }
-            ]}
-          />
-          <View style={styles.engineCore} />
-        </>
-      ) : null}
-      <View style={styles.rocketShadow} />
-      <View style={styles.rocketBody}>
-        <View style={styles.rocketWindow} />
-      </View>
-      <View style={[styles.rocketNose, { borderBottomColor: accentColor }]} />
-      <View style={[styles.rocketFinLeft, { borderTopColor: accentColor }]} />
-      <View style={[styles.rocketFinRight, { borderTopColor: accentColor }]} />
+      <Text style={styles.padText}>{pad.kind === "finish" ? "LAND" : "START"}</Text>
     </View>
   );
 }
@@ -733,34 +851,32 @@ const styles = StyleSheet.create({
   },
   safeArea: {
     flex: 1,
+    overflow: "hidden",
     paddingHorizontal: theme.spacing.md
   },
-  shell: {
+  gameShell: {
     flex: 1,
-    gap: theme.spacing.md,
+    gap: theme.spacing.md
+  },
+  gameShellLandscape: {
+    gap: theme.spacing.sm
+  },
+  header: {
+    alignItems: "center",
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: theme.spacing.sm,
+    justifyContent: "space-between",
     paddingBottom: theme.spacing.md,
     paddingTop: theme.spacing.sm
   },
-  header: {
-    alignItems: "flex-start",
-    gap: theme.spacing.sm,
-    justifyContent: "space-between"
+  headerLandscape: {
+    paddingBottom: theme.spacing.sm
   },
-  headerWide: {
-    alignItems: "center",
-    flexDirection: "row"
-  },
-  metricsRow: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: theme.spacing.sm
-  },
-  metricCard: {
-    backgroundColor: "rgba(8, 15, 26, 0.84)",
-    borderColor: "rgba(136, 216, 255, 0.14)",
+  metricBlock: {
+    backgroundColor: theme.colors.card,
     borderRadius: theme.radius.lg,
-    borderWidth: 1,
-    minWidth: 88,
+    minWidth: 84,
     paddingHorizontal: theme.spacing.md,
     paddingVertical: theme.spacing.sm
   },
@@ -768,262 +884,204 @@ const styles = StyleSheet.create({
     color: theme.colors.subtleText,
     fontFamily: theme.fonts.label,
     fontSize: 11,
-    letterSpacing: 1.2,
+    letterSpacing: 1.1,
     textTransform: "uppercase"
   },
   metricValue: {
     color: theme.colors.text,
     fontFamily: theme.fonts.bodyBold,
-    fontSize: 20
+    fontSize: 18
   },
-  headerButtons: {
-    flexDirection: "row",
-    gap: theme.spacing.sm
-  },
-  headerButton: {
-    backgroundColor: "rgba(12, 22, 38, 0.92)",
-    borderColor: theme.colors.border,
+  pauseButton: {
+    backgroundColor: theme.colors.cardMuted,
     borderRadius: 999,
-    borderWidth: 1,
     paddingHorizontal: theme.spacing.md,
     paddingVertical: theme.spacing.sm
   },
-  headerButtonPressed: {
+  pauseButtonPressed: {
     opacity: 0.82
   },
-  headerButtonLabel: {
+  pauseLabel: {
     color: theme.colors.text,
     fontFamily: theme.fonts.bodyBold,
     fontSize: 14
   },
   arenaShell: {
-    backgroundColor: "rgba(6, 10, 18, 0.92)",
-    borderColor: "rgba(143, 214, 255, 0.2)",
+    backgroundColor: "rgba(6, 16, 29, 0.8)",
+    borderColor: theme.colors.border,
     borderRadius: theme.radius.xl,
     borderWidth: 1,
     flex: 1,
-    minHeight: 420,
     overflow: "hidden",
     position: "relative"
   },
-  viewport: {
-    flex: 1,
-    overflow: "hidden"
+  arenaShellLandscape: {
+    minHeight: 0
   },
-  viewportOverlay: {
-    backgroundColor: "rgba(0, 0, 0, 0.14)",
-    ...StyleSheet.absoluteFillObject
+  arena: {
+    flex: 1
   },
-  stage: {
-    left: 0,
-    overflow: "hidden",
+  skyGlowTop: {
+    backgroundColor: "rgba(56, 189, 248, 0.08)",
+    borderRadius: 280,
+    height: 280,
+    left: -80,
     position: "absolute",
-    top: 0
+    top: -70,
+    width: 280
   },
-  stageGridRow: {
-    backgroundColor: "rgba(108, 157, 255, 0.06)",
-    height: 1,
-    left: 0,
+  skyGlowBottom: {
+    backgroundColor: "rgba(249, 115, 22, 0.08)",
+    borderRadius: 340,
+    bottom: -140,
+    height: 340,
     position: "absolute",
-    right: 0
-  },
-  stageGridColumn: {
-    backgroundColor: "rgba(108, 157, 255, 0.05)",
-    bottom: 0,
-    position: "absolute",
-    top: 0,
-    width: 1
+    right: -120,
+    width: 340
   },
   star: {
-    backgroundColor: "#f8fbff",
-    borderRadius: 999,
     position: "absolute"
   },
-  boundaryTop: {
-    backgroundColor: "rgba(18, 48, 92, 0.5)",
-    borderBottomColor: "rgba(94, 242, 255, 0.28)",
-    borderBottomWidth: 1,
-    height: 52,
-    left: 0,
+  sectionBand: {
+    bottom: 0,
     position: "absolute",
-    right: 0,
     top: 0
   },
-  boundaryBottom: {
-    backgroundColor: "rgba(18, 48, 92, 0.5)",
-    borderTopColor: "rgba(94, 242, 255, 0.28)",
-    borderTopWidth: 1,
+  horizonGrid: {
     bottom: 0,
-    height: 52,
+    left: 0,
+    opacity: 0.42,
+    position: "absolute",
+    right: 0,
+    top: "62%"
+  },
+  horizonLine: {
+    backgroundColor: "rgba(56, 189, 248, 0.16)",
+    height: 1,
     left: 0,
     position: "absolute",
     right: 0
   },
-  corridorBeam: {
-    height: 1,
-    position: "absolute"
+  horizonLineTop: {
+    top: "20%"
   },
-  corridorBeacon: {
-    borderRadius: 999,
-    height: 6,
-    position: "absolute",
-    width: 6
+  horizonLineMid: {
+    top: "48%"
   },
-  padSupport: {
-    backgroundColor: "rgba(75, 102, 135, 0.34)",
-    height: 8,
+  horizonLineBottom: {
+    top: "76%"
+  },
+  obstacle: {
+    borderWidth: 1,
     position: "absolute"
   },
   pad: {
-    backgroundColor: "rgba(5, 12, 22, 0.9)",
-    borderRadius: 4,
-    borderWidth: 2,
-    height: 18,
-    position: "absolute"
-  },
-  padLabel: {
-    fontFamily: theme.fonts.label,
-    fontSize: 12,
-    letterSpacing: 1.4,
-    position: "absolute",
-    textTransform: "uppercase"
-  },
-  rectObstacle: {
-    borderRadius: 14,
-    borderWidth: 1,
-    gap: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    position: "absolute"
-  },
-  tunnelObstacle: {
-    backgroundColor: "rgba(18, 29, 48, 0.92)"
-  },
-  hangarObstacle: {
-    backgroundColor: "rgba(29, 20, 38, 0.9)"
-  },
-  obstacleStripe: {
-    backgroundColor: "rgba(255, 255, 255, 0.09)",
-    borderRadius: 999,
-    height: 3
-  },
-  rockObstacle: {
-    backgroundColor: "rgba(35, 42, 58, 0.96)",
-    borderWidth: 1.5,
-    position: "absolute"
-  },
-  stageLabel: {
-    left: 34,
-    position: "absolute",
-    top: 28
-  },
-  stageLabelText: {
-    fontFamily: theme.fonts.label,
-    fontSize: 13,
-    letterSpacing: 1.6,
-    textTransform: "uppercase"
-  },
-  rocketFrame: {
     alignItems: "center",
+    borderRadius: 999,
+    borderWidth: 1,
     justifyContent: "center",
     position: "absolute"
   },
-  engineGlow: {
-    borderRadius: 999,
-    bottom: -16,
-    height: 24,
-    opacity: 0.26,
-    position: "absolute",
-    width: 12
+  padStart: {
+    backgroundColor: "rgba(56, 189, 248, 0.16)",
+    borderColor: "rgba(125, 199, 255, 0.58)"
   },
-  engineCore: {
-    backgroundColor: "#ffdca8",
-    borderRadius: 999,
-    bottom: -12,
-    height: 16,
-    position: "absolute",
-    width: 6
+  padFinish: {
+    backgroundColor: "rgba(249, 115, 22, 0.2)",
+    borderColor: "rgba(255, 190, 120, 0.62)"
   },
-  rocketShadow: {
-    backgroundColor: "rgba(0, 0, 0, 0.32)",
-    borderRadius: 999,
-    height: 20,
-    opacity: 0.4,
-    position: "absolute",
-    top: 8,
-    width: 12
+  padText: {
+    color: theme.colors.text,
+    fontFamily: theme.fonts.label,
+    fontSize: 10,
+    letterSpacing: 1.1,
+    textTransform: "uppercase"
+  },
+  rocket: {
+    alignItems: "center",
+    position: "absolute"
   },
   rocketBody: {
-    alignItems: "center",
-    backgroundColor: "#f4f7ff",
-    borderRadius: 10,
-    height: 24,
-    justifyContent: "center",
-    width: 14
+    backgroundColor: "#d8e5f7",
+    borderColor: "rgba(255,255,255,0.66)",
+    borderWidth: 1,
+    bottom: 0,
+    left: "50%",
+    marginLeft: -9,
+    position: "absolute",
+    top: 0,
+    width: 18
   },
   rocketWindow: {
-    backgroundColor: "#091225",
+    backgroundColor: theme.colors.accent,
     borderRadius: 999,
-    height: 6,
-    width: 6
-  },
-  rocketNose: {
-    borderLeftColor: "transparent",
-    borderLeftWidth: 7,
-    borderRightColor: "transparent",
-    borderRightWidth: 7,
-    borderBottomWidth: 10,
+    left: "50%",
+    marginLeft: -4,
     position: "absolute",
-    top: -9
+    top: 18
   },
   rocketFinLeft: {
+    backgroundColor: "transparent",
+    borderBottomColor: "#f97316",
     borderLeftColor: "transparent",
-    borderLeftWidth: 1,
-    borderRightColor: "transparent",
-    borderRightWidth: 6,
-    borderTopWidth: 12,
-    bottom: 2,
-    left: 1,
+    bottom: 0,
+    left: "50%",
+    marginLeft: -18,
     position: "absolute"
   },
   rocketFinRight: {
-    borderLeftColor: "transparent",
-    borderLeftWidth: 6,
+    backgroundColor: "transparent",
+    borderBottomColor: "#f97316",
     borderRightColor: "transparent",
-    borderRightWidth: 1,
-    borderTopWidth: 12,
-    bottom: 2,
-    position: "absolute",
-    right: 1
+    bottom: 0,
+    left: "50%",
+    marginLeft: 8,
+    position: "absolute"
   },
-  touchSurface: {
-    ...StyleSheet.absoluteFillObject
+  rocketFlame: {
+    backgroundColor: "rgba(251, 191, 36, 0.92)",
+    borderBottomLeftRadius: 999,
+    borderBottomRightRadius: 999,
+    borderTopLeftRadius: 10,
+    borderTopRightRadius: 10,
+    left: "50%",
+    marginLeft: -9,
+    position: "absolute"
   },
-  touchSurfaceFill: {
-    flex: 1
-  },
-  touchHint: {
-    alignItems: "flex-start",
+  banner: {
+    backgroundColor: "rgba(6, 16, 29, 0.68)",
+    borderRadius: 999,
     bottom: theme.spacing.md,
     left: theme.spacing.md,
-    position: "absolute",
-    right: theme.spacing.md
+    maxWidth: "82%",
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.sm,
+    position: "absolute"
   },
-  touchHintTitle: {
-    color: theme.colors.text,
-    fontFamily: theme.fonts.bodyBold,
-    fontSize: 16
-  },
-  touchHintBody: {
+  bannerLabel: {
+    color: theme.colors.accent,
     fontFamily: theme.fonts.label,
-    fontSize: 12,
-    letterSpacing: 1.4,
-    marginTop: 4,
+    fontSize: 11,
+    letterSpacing: 1.1,
     textTransform: "uppercase"
+  },
+  bannerCopy: {
+    color: theme.colors.text,
+    fontFamily: theme.fonts.body,
+    fontSize: 14,
+    lineHeight: 20,
+    marginTop: 2
+  },
+  progressBar: {
+    backgroundColor: theme.colors.surface,
+    bottom: 0,
+    height: 5,
+    left: 0,
+    position: "absolute"
   },
   overlay: {
     alignItems: "center",
-    backgroundColor: "rgba(4, 8, 14, 0.8)",
+    backgroundColor: "rgba(7, 17, 31, 0.78)",
     gap: theme.spacing.md,
     inset: 0,
     justifyContent: "center",
@@ -1033,16 +1091,22 @@ const styles = StyleSheet.create({
   overlayTitle: {
     color: theme.colors.text,
     fontFamily: theme.fonts.display,
-    fontSize: 32,
+    fontSize: 30,
     textAlign: "center"
   },
-  overlayBody: {
+  overlayText: {
     color: theme.colors.subtleText,
     fontFamily: theme.fonts.body,
     fontSize: 15,
-    lineHeight: 23,
-    maxWidth: 520,
+    lineHeight: 22,
     textAlign: "center"
+  },
+  overlayMetrics: {
+    color: theme.colors.accent,
+    fontFamily: theme.fonts.label,
+    fontSize: 12,
+    letterSpacing: 1.2,
+    textTransform: "uppercase"
   },
   overlayButtons: {
     flexDirection: "row",
@@ -1060,10 +1124,8 @@ const styles = StyleSheet.create({
     fontSize: 15
   },
   overlaySecondary: {
-    backgroundColor: "rgba(17, 28, 46, 0.96)",
-    borderColor: theme.colors.border,
+    backgroundColor: theme.colors.cardMuted,
     borderRadius: 999,
-    borderWidth: 1,
     paddingHorizontal: theme.spacing.lg,
     paddingVertical: theme.spacing.md
   },
@@ -1072,21 +1134,103 @@ const styles = StyleSheet.create({
     fontFamily: theme.fonts.bodyBold,
     fontSize: 15
   },
-  footer: {
-    gap: 4
+  controlsRow: {
+    alignItems: "stretch",
+    flexDirection: "row",
+    justifyContent: "space-between",
+    paddingBottom: theme.spacing.sm,
+    paddingTop: theme.spacing.md
   },
-  footerWide: {
-    maxWidth: 920
+  controlCard: {
+    backgroundColor: theme.colors.card,
+    borderColor: theme.colors.border,
+    borderRadius: theme.radius.lg,
+    borderWidth: 1,
+    gap: theme.spacing.sm,
+    minWidth: 166,
+    padding: theme.spacing.md
   },
-  footerTitle: {
+  controlLabel: {
+    color: theme.colors.subtleText,
+    fontFamily: theme.fonts.label,
+    fontSize: 11,
+    letterSpacing: 1.1,
+    textTransform: "uppercase"
+  },
+  controlValue: {
     color: theme.colors.text,
     fontFamily: theme.fonts.bodyBold,
-    fontSize: 16
+    fontSize: 18
   },
-  footerText: {
+  controlCopy: {
     color: theme.colors.subtleText,
     fontFamily: theme.fonts.body,
-    fontSize: 14,
-    lineHeight: 21
+    fontSize: 13,
+    lineHeight: 19
+  },
+  controlHint: {
+    color: theme.colors.subtleText,
+    fontFamily: theme.fonts.label,
+    fontSize: 11,
+    letterSpacing: 1.1,
+    textTransform: "uppercase"
+  },
+  steerMeter: {
+    backgroundColor: "rgba(255,255,255,0.08)",
+    borderRadius: 999,
+    height: 14,
+    overflow: "hidden",
+    position: "relative"
+  },
+  steerMeterCenter: {
+    backgroundColor: "rgba(255,255,255,0.16)",
+    height: "100%",
+    left: "50%",
+    marginLeft: -1,
+    position: "absolute",
+    width: 2
+  },
+  steerMeterFill: {
+    backgroundColor: theme.colors.accent,
+    bottom: 0,
+    position: "absolute",
+    top: 0
+  },
+  trimButton: {
+    alignSelf: "flex-start",
+    backgroundColor: "rgba(56, 189, 248, 0.12)",
+    borderRadius: 999,
+    paddingHorizontal: theme.spacing.sm,
+    paddingVertical: 6
+  },
+  trimButtonPressed: {
+    opacity: 0.82
+  },
+  trimButtonText: {
+    color: theme.colors.text,
+    fontFamily: theme.fonts.bodyBold,
+    fontSize: 12
+  },
+  landscapeSession: {
+    alignItems: "stretch",
+    flex: 1,
+    flexDirection: "row",
+    gap: theme.spacing.md,
+    minHeight: 0
+  },
+  landscapeCenterColumn: {
+    flex: 1,
+    minHeight: 0
+  },
+  landscapeRail: {
+    justifyContent: "center",
+    paddingBottom: theme.spacing.sm,
+    width: 212
+  },
+  landscapeRailLeft: {
+    alignItems: "flex-start"
+  },
+  landscapeRailRight: {
+    alignItems: "flex-end"
   }
 });

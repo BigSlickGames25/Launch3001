@@ -10,62 +10,87 @@ export type ArenaSize = {
 
 export type GameEvent =
   | "none"
-  | "launch"
-  | "level-complete"
   | "crash"
-  | "campaign-complete";
+  | "landing"
+  | "level-complete"
+  | "run-complete";
 
-export type FlightStatus =
-  | "ready"
-  | "running"
-  | "failed"
-  | "landed"
-  | "campaign-complete";
+export type GameStatus =
+  | "playing"
+  | "crashed"
+  | "level-complete"
+  | "run-complete";
+
+export type ObstacleKind =
+  | "terrain"
+  | "hangar"
+  | "rock"
+  | "gate"
+  | "platform";
+
+export type LevelSectionKind =
+  | "launch"
+  | "space"
+  | "hangar"
+  | "rock"
+  | "needle"
+  | "landing";
+
+export type Obstacle = {
+  id: string;
+  kind: ObstacleKind;
+  position: Vector;
+  radius: number;
+  size: Vector;
+};
 
 export type Pad = {
+  kind: "start" | "finish";
   height: number;
-  label: string;
-  side: "left" | "right";
+  position: Vector;
   width: number;
-  x: number;
-  y: number;
 };
 
-export type RectObstacle = {
-  height: number;
+export type LevelSection = {
+  endX: number;
+  gapBottom: number;
+  gapTop: number;
   id: string;
-  kind: "hangar" | "tunnel";
-  shape: "rect";
-  width: number;
-  x: number;
-  y: number;
+  kind: LevelSectionKind;
+  startX: number;
 };
-
-export type CircleObstacle = {
-  id: string;
-  kind: "rock";
-  radius: number;
-  shape: "circle";
-  x: number;
-  y: number;
-};
-
-export type Obstacle = RectObstacle | CircleObstacle;
 
 export type Star = {
   alpha: number;
-  depth: number;
   id: string;
   position: Vector;
   size: number;
+  tone: "amber" | "blue" | "white";
+};
+
+export type LevelDefinition = {
+  difficulty: number;
+  finishPad: Pad;
+  height: number;
+  number: number;
+  obstacles: Obstacle[];
+  sections: LevelSection[];
+  stars: Star[];
+  startPad: Pad;
+  width: number;
 };
 
 export type Rocket = {
   angle: number;
+  height: number;
+  landed: boolean;
+  launched: boolean;
   position: Vector;
   radius: number;
+  restingPad: "start" | "finish" | null;
   thrusting: boolean;
   velocity: Vector;
+  width: number;
 };
 
 export type Camera = {
@@ -73,36 +98,44 @@ export type Camera = {
   zoom: number;
 };
 
-export type LevelData = {
-  accentColor: string;
-  corridor: Vector[];
-  goalPad: Pad;
-  height: number;
-  name: string;
-  number: number;
-  obstacles: Obstacle[];
-  stars: Star[];
-  startPad: Pad;
-  width: number;
+export type LandingMetrics = {
+  angleDegrees: number;
+  horizontalSpeed: number;
+  totalSpeed: number;
+  verticalSpeed: number;
+};
+
+export type FailureReason =
+  | "obstacle"
+  | "out-of-bounds"
+  | "hard-landing"
+  | "bad-angle";
+
+export type LandingThresholds = {
+  angleDegrees: number;
+  horizontalSpeed: number;
+  verticalSpeed: number;
 };
 
 export type GameInput = {
-  tap: boolean;
+  steer: number;
   thrust: boolean;
 };
 
 export type GameWorld = {
   arena: ArenaSize;
   camera: Camera;
-  currentLevel: number;
+  currentSectionKind: LevelSectionKind;
   event: GameEvent;
   eventNonce: number;
-  failureReason: string | null;
-  gameOver: boolean;
-  levelData: LevelData;
+  failureReason: FailureReason | null;
+  landingMetrics: LandingMetrics | null;
+  level: LevelDefinition;
+  levelNumber: number;
   maxLevel: number;
+  message: string;
+  progress: number;
   rocket: Rocket;
-  safeLandingSpeed: number;
-  status: FlightStatus;
+  status: GameStatus;
   time: number;
 };

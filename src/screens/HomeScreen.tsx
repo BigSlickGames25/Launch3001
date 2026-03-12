@@ -1,13 +1,10 @@
 import { Href, router } from "expo-router";
 import { startTransition } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { StyleSheet, Text, View } from "react-native";
 
 import { ScreenContainer } from "../components/layout/ScreenContainer";
 import { GameButton } from "../components/ui/GameButton";
-import { runtimeConfig } from "../config/runtime";
 import { useDeviceProfile } from "../hooks/useDeviceProfile";
-import { coreHubCapabilities } from "../platform/catalog/products";
-import { useHubSession } from "../platform/auth/session";
 import { fireHaptic } from "../services/haptics";
 import { useGameSettings } from "../store/game-settings";
 import { clamp, theme } from "../theme";
@@ -15,43 +12,16 @@ import { clamp, theme } from "../theme";
 export function HomeScreen() {
   const device = useDeviceProfile();
   const { settings } = useGameSettings();
-  const { currentProduct, hasToken, profile, status } = useHubSession();
   const isWide = device.isLandscape || device.width >= 860;
   const isCompact = device.width < 390;
-  const titleFontSize = Math.round(clamp(34 * device.textScale, 28, 38));
-  const sessionLabel = profile?.sUserName
-    ? `${profile.sUserName}${typeof profile.nChips === "number" ? ` | ${profile.nChips} chips` : ""}`
-    : status === "guest"
-      ? "Guest pilot profile ready"
-      : hasToken
-        ? "Stored hub session"
-        : "No session yet";
+  const titleFontSize = Math.round(clamp(40 * device.textScale, 30, 46));
 
-  function goToGame() {
-    void fireHaptic(settings.haptics, "confirm");
+  function navigate(path: Href, cue: "confirm" | "tap" = "tap") {
+    void fireHaptic(settings.haptics, cue);
+
     startTransition(() => {
-      router.push("/game" as Href);
+      router.push(path);
     });
-  }
-
-  function goToLauncher() {
-    void fireHaptic(settings.haptics, "tap");
-    router.navigate("/launcher" as Href);
-  }
-
-  function goToHub() {
-    void fireHaptic(settings.haptics, "tap");
-    router.navigate("/hub" as Href);
-  }
-
-  function goToSettings() {
-    void fireHaptic(settings.haptics, "tap");
-    router.navigate("/settings" as Href);
-  }
-
-  function goToHowToPlay() {
-    void fireHaptic(settings.haptics, "tap");
-    router.navigate("/how-to-play" as Href);
   }
 
   return (
@@ -67,7 +37,7 @@ export function HomeScreen() {
             isCompact && styles.compactCard
           ]}
         >
-          <Text style={styles.kicker}>Big Slick Games</Text>
+          <Text style={styles.kicker}>80s Sci-Fi Skill Run</Text>
           <Text
             style={[
               styles.title,
@@ -77,14 +47,18 @@ export function HomeScreen() {
               }
             ]}
           >
-            Launch through 30 no-save sectors.
+            Launch the rocket. Survive all 30 levels in one run.
           </Text>
           <Text style={styles.description}>
-            Launch is an 80s sci-fi rocket run. Lift off from the left pad, tap
-            and hold to burn upward against gravity, cut through hangars,
-            tunnels, and rocks, then land softly on the right-side pad before
-            the campaign resets you.
+            Tilt steers the nose, hold thrust to burn, gravity never stops, and
+            every failed landing or collision throws the run back to level 1.
           </Text>
+          <View style={styles.inlineChips}>
+            <InlineChip label="Tilt steer" />
+            <InlineChip label="Tap + hold thrust" />
+            <InlineChip label="No saves" />
+            <InlineChip label="30-level run" />
+          </View>
         </View>
 
         <View
@@ -96,105 +70,112 @@ export function HomeScreen() {
         >
           <Text style={styles.notesTitle}>Prototype Status</Text>
           <Text style={styles.notesText}>
-            The current build already has generated sectors, dynamic camera
-            zoom, soft-landing rules, and full-run restart stakes. Background
-            plates and final sound design can layer on top of this loop next.
+            Gameplay, level flow, crash rules, and camera behavior are live.
+            The current checkout does not include the expected rocket and
+            launchpad source models, so the game is rendering clean
+            placeholders until GLB or GLTF assets are dropped in.
           </Text>
           <Text style={styles.notesMeta}>
-            Active product: {currentProduct.title}
+            Expected source files: Rocket.obj, Rocket.mtl, Launchpad.obj,
+            Launchpad.mtl
           </Text>
           <Text style={styles.notesMeta}>
-            Flight mode: tap-to-thrust side-scroller
+            Next asset step: convert to rocket.glb and launchpad.glb
           </Text>
-          <Pressable
-            onPress={goToGame}
-            style={({ pressed }) => [
-              styles.inlineAction,
-              pressed && styles.inlineActionPressed
-            ]}
-          >
-            <Text style={styles.inlineActionText}>Start the run</Text>
-          </Pressable>
         </View>
       </View>
 
       <View style={[styles.bottomRow, isWide && styles.bottomRowWide]}>
         <View style={[styles.featureGrid, isWide && styles.bottomPanel]}>
-          <FeatureChip compact={isCompact} label="Run" value="30 linked sectors" wide={isWide} />
           <FeatureChip
             compact={isCompact}
-            label="Controls"
-            value="Tap and hold to burn"
+            label="Run Rule"
+            value="Fail any level and restart from 1"
+            wide={isWide}
+          />
+          <FeatureChip
+            compact={isCompact}
+            label="Physics"
+            value="Momentum, gravity, thrust, and landing thresholds"
             wide={isWide}
           />
           <FeatureChip
             compact={isCompact}
             label="Camera"
-            value="Dynamic zoom + lookahead"
+            value="Zooms out for sightlines and in for precision"
             wide={isWide}
           />
           <FeatureChip
             compact={isCompact}
-            label="Stakes"
-            value="Crash once, back to 1"
+            label="Controls"
+            value={
+              settings.orientation === "landscape"
+                ? "Landscape play tuned"
+                : settings.orientation === "portrait"
+                  ? "Portrait play tuned"
+                  : "Adaptive orientation"
+            }
             wide={isWide}
           />
           <FeatureChip
             compact={isCompact}
-            label="Art"
-            value="80s sci-fi placeholder pass"
+            label="HUD"
+            value={
+              settings.handPreference === "left"
+                ? "Left-hand thrust layout"
+                : "Right-hand thrust layout"
+            }
             wide={isWide}
           />
           <FeatureChip
             compact={isCompact}
-            label="Session"
-            value={sessionLabel}
-            wide={isWide}
-          />
-          <FeatureChip
-            compact={isCompact}
-            label="Hub"
-            value={`${coreHubCapabilities.length} shared services`}
-            wide={isWide}
-          />
-          <FeatureChip
-            compact={isCompact}
-            label="Backend"
-            value={runtimeConfig.backendLabel}
+            label="Feedback"
+            value={`Haptics ${settings.haptics}`}
             wide={isWide}
           />
         </View>
 
         <View style={[styles.buttonStack, isWide && styles.bottomPanel]}>
           <GameButton
-            label="Launcher"
-            onPress={goToLauncher}
-            subtitle="Choose the active product identity for this build"
+            label="Start Run"
+            onPress={() => {
+              navigate("/game" as Href, "confirm");
+            }}
+            subtitle="Enter level 1 immediately"
             tone="primary"
           />
           <GameButton
-            label="Hub Console"
-            onPress={goToHub}
-            subtitle="Open auth, profile, wallet, and rewards routes"
+            label="Launch Bay"
+            onPress={() => {
+              navigate("/launcher" as Href);
+            }}
+            subtitle="Read the mission ramp, asset note, and run structure"
           />
           <GameButton
-            label="Start Launch"
-            onPress={goToGame}
-            subtitle="Enter the current rocket-landing prototype"
+            label="How To Play"
+            onPress={() => {
+              navigate("/how-to-play" as Href);
+            }}
+            subtitle="Controls, fail state, landing rules, and device fallback"
           />
           <GameButton
             label="Settings"
-            onPress={goToSettings}
-            subtitle={`Orientation ${settings.orientation}, haptics ${settings.haptics}`}
-          />
-          <GameButton
-            label="Flight Guide"
-            onPress={goToHowToPlay}
-            subtitle="Run rules, controls, and current production direction"
+            onPress={() => {
+              navigate("/settings" as Href);
+            }}
+            subtitle="Orientation, haptics, handedness, and touch labels"
           />
         </View>
       </View>
     </ScreenContainer>
+  );
+}
+
+function InlineChip({ label }: { label: string }) {
+  return (
+    <View style={styles.inlineChip}>
+      <Text style={styles.inlineChipText}>{label}</Text>
+    </View>
   );
 }
 
@@ -276,7 +257,6 @@ const styles = StyleSheet.create({
     color: theme.colors.text,
     flexShrink: 1,
     fontFamily: theme.fonts.display,
-    fontSize: 34,
     lineHeight: 38
   },
   description: {
@@ -285,6 +265,22 @@ const styles = StyleSheet.create({
     fontFamily: theme.fonts.body,
     fontSize: 16,
     lineHeight: 24
+  },
+  inlineChips: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: theme.spacing.sm
+  },
+  inlineChip: {
+    backgroundColor: "rgba(56, 189, 248, 0.12)",
+    borderRadius: 999,
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: 8
+  },
+  inlineChipText: {
+    color: theme.colors.text,
+    fontFamily: theme.fonts.bodyBold,
+    fontSize: 12
   },
   featureGrid: {
     flexDirection: "row",
@@ -341,21 +337,6 @@ const styles = StyleSheet.create({
     color: theme.colors.text,
     fontFamily: theme.fonts.bodyBold,
     fontSize: 13,
-    letterSpacing: 0.3
-  },
-  inlineAction: {
-    alignSelf: "flex-start",
-    backgroundColor: theme.colors.surface,
-    borderRadius: 999,
-    paddingHorizontal: theme.spacing.md,
-    paddingVertical: theme.spacing.sm
-  },
-  inlineActionPressed: {
-    opacity: 0.8
-  },
-  inlineActionText: {
-    color: theme.colors.text,
-    fontFamily: theme.fonts.bodyBold,
-    fontSize: 14
+    lineHeight: 19
   }
 });

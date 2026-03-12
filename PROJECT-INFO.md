@@ -1,4 +1,4 @@
-# New Game 01
+# Launch
 
 Standalone frontend project created from the shared Big Slick template.
 

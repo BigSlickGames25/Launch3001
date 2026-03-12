@@ -13,8 +13,6 @@ export const theme = {
     text: "#eff6ff",
     subtleText: "#9fb2ca",
     warning: "#fb7185",
-    joystickBase: "rgba(255, 255, 255, 0.12)",
-    joystickKnob: "#e2e8f0",
     player: "#38bdf8",
     orb: "#f97316",
     hazard: "#fb7185"
@@ -60,4 +58,3 @@ export const theme = {
 export function clamp(value: number, min: number, max: number) {
   return Math.max(min, Math.min(max, value));
 }
-

@@ -15,39 +15,39 @@ export function HowToPlayScreen() {
       contentContainerStyle={[styles.content, isWide && styles.contentWide]}
     >
       <InfoCard
-        body="Each sector starts on a left launch pad. The rocket auto-drifts right, gravity keeps pulling down, and your job is to manage altitude until you reach the landing pad on the far side."
+        body="Tilt the phone to steer the rocket's nose. Hold the thrust control to burn. Gravity is always active, so short, deliberate burns are safer than panic-holding."
         compact={isCompact}
-        title="Flight Loop"
+        title="Core Controls"
         wide={isWide}
       />
       <InfoCard
-        body="Tap and hold anywhere on the playfield to burn upward. The rocket will tilt with its momentum, so you read climb and descent from the sprite itself."
+        body="Each level begins on a left-side launch deck, then pushes through open space, hangars, rock tunnels, and narrow routes before a final landing pad."
         compact={isCompact}
-        title="Controls"
+        title="Level Shape"
         wide={isWide}
       />
       <InfoCard
-        body="Pads only count if the touchdown is soft. Clip a wall, hit a rock, miss the pad, or land too hard and the entire campaign restarts from Sector 1."
+        body="A safe landing needs controlled vertical speed, controlled horizontal speed, and a near-upright rocket. Hit obstacles, leave the route, or land too hard and the run resets to level 1."
         compact={isCompact}
-        title="No Saves"
+        title="Fail State"
         wide={isWide}
       />
       <InfoCard
-        body="The camera zooms and looks ahead as danger builds. Tight tunnels and landing approaches pull the frame wider so you can read more of the sector."
+        body="The camera widens when you need route preview and tightens when the corridor or landing zone needs precision. Keep your eyes ahead of the rocket, not just on it."
         compact={isCompact}
-        title="Camera"
+        title="Camera Read"
         wide={isWide}
       />
       <InfoCard
-        body="Current presentation is a placeholder neon pass aimed at 80s sci-fi. Background plates, parallax art, sound, and stronger pad/obstacle identities are the next production layer."
+        body="If device motion is unavailable, Launch exposes a touch steering fallback so the prototype remains playable. The intended final input is still phone tilt."
         compact={isCompact}
-        title="Art Direction"
+        title="Fallback Input"
         wide={isWide}
       />
       <InfoCard
-        body="The shell still keeps safe areas, orientation handling, settings, haptics, and the shared hub routes intact. Gameplay now lives in src/game and can keep evolving without rebuilding the app frame."
+        body="This checkout is missing Rocket.obj, Rocket.mtl, Launchpad.obj, and Launchpad.mtl, so the prototype renders placeholders. Convert those assets to GLB or GLTF and swap them into the render layer next."
         compact={isCompact}
-        title="Shell"
+        title="Asset Note"
         wide={isWide}
       />
     </ScreenContainer>

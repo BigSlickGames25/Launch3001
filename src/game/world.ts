@@ -2,70 +2,504 @@ import { clamp } from "../theme";
 import {
   ArenaSize,
   Camera,
+  FailureReason,
   GameInput,
   GameWorld,
-  LevelData,
+  LandingMetrics,
+  LandingThresholds,
+  LevelDefinition,
+  LevelSection,
+  LevelSectionKind,
   Obstacle,
+  ObstacleKind,
+  Pad,
   Rocket,
   Star,
   Vector
 } from "./types";
 
 const MAX_LEVEL = 30;
+const ROCKET_WIDTH = 34;
+const ROCKET_HEIGHT = 60;
 const ROCKET_RADIUS = 18;
-const WORLD_MARGIN_TOP = 52;
-const WORLD_MARGIN_BOTTOM = 52;
-const BASE_FORWARD_SPEED = 210;
-const FORWARD_SPEED_STEP = 8;
-const GRAVITY = 720;
-const THRUST_ACCELERATION = 1180;
-const TAP_IMPULSE = 140;
-const LAUNCH_UPWARD_VELOCITY = -208;
-const CAMERA_SMOOTHING = 0.12;
+const MAX_STEER_ANGLE = Math.PI * 0.42;
+const ROTATION_RESPONSE = 7.8;
+const HORIZONTAL_DRAG = 0.22;
+const VERTICAL_DRAG = 0.08;
 
-const LEVEL_NAMES = [
-  "Hangar Wake",
-  "Blue Relay",
-  "Stone Drift",
-  "Echo Tunnel",
-  "Ion Gate",
-  "Chrome Throat",
-  "Mag Rail",
-  "Dust Arch",
-  "Solar Spine",
-  "Cold Grid"
-] as const;
+type Rng = () => number;
 
-const LEVEL_ACCENTS = [
-  "#5ef2ff",
-  "#ff8f43",
-  "#ff5d8f",
-  "#8dfd6d",
-  "#ffd95e"
-] as const;
-
-function createRng(seed: number) {
+function createRng(seed: number): Rng {
   let state = seed >>> 0;
 
   return () => {
-    state += 0x6d2b79f5;
-    let value = Math.imul(state ^ (state >>> 15), state | 1);
-
-    value ^= value + Math.imul(value ^ (value >>> 7), value | 61);
-
-    return ((value ^ (value >>> 14)) >>> 0) / 4294967296;
+    state = (Math.imul(state, 1664525) + 1013904223) >>> 0;
+    return state / 4294967296;
   };
 }
 
-function randomBetween(rng: () => number, min: number, max: number) {
+function randomBetween(rng: Rng, min: number, max: number) {
   return min + rng() * (max - min);
 }
 
-function distance(a: Vector, b: Vector) {
-  return Math.hypot(a.x - b.x, a.y - b.y);
+function makeObstacle(
+  id: string,
+  kind: ObstacleKind,
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+  radius = 0
+): Obstacle {
+  return {
+    id,
+    kind,
+    position: { x, y },
+    radius,
+    size: {
+      x: width,
+      y: height
+    }
+  };
 }
 
-function stampEvent(world: GameWorld, event: GameWorld["event"]) {
+function createStars(width: number, height: number, rng: Rng): Star[] {
+  const stars: Star[] = [];
+  const starCount = 78;
+  const tones: Star["tone"][] = ["white", "blue", "amber"];
+
+  for (let index = 0; index < starCount; index += 1) {
+    stars.push({
+      alpha: randomBetween(rng, 0.3, 0.92),
+      id: `star-${index}`,
+      position: {
+        x: randomBetween(rng, 0, width),
+        y: randomBetween(rng, 0, height)
+      },
+      size: randomBetween(rng, 1.2, 3.6),
+      tone: tones[index % tones.length]
+    });
+  }
+
+  return stars;
+}
+
+function pickSectionKind(
+  index: number,
+  totalSections: number,
+  levelNumber: number,
+  rng: Rng
+): LevelSectionKind {
+  if (index === 0) {
+    return "launch";
+  }
+
+  if (index === totalSections - 1) {
+    return "landing";
+  }
+
+  const difficulty = (levelNumber - 1) / (MAX_LEVEL - 1);
+  const roll = rng();
+
+  if (difficulty > 0.45 && roll > 0.8) {
+    return "needle";
+  }
+
+  if (roll > 0.58) {
+    return "hangar";
+  }
+
+  if (roll > 0.28) {
+    return "rock";
+  }
+
+  return "space";
+}
+
+function getSectionGap(
+  levelNumber: number,
+  kind: LevelSectionKind,
+  rng: Rng
+): number {
+  const baseGap = 344 - levelNumber * 4.1;
+  const penalties: Record<LevelSectionKind, number> = {
+    hangar: 40,
+    landing: 60,
+    launch: -10,
+    needle: 86,
+    rock: 28,
+    space: 0
+  };
+
+  return clamp(baseGap - penalties[kind] + randomBetween(rng, -18, 18), 150, 348);
+}
+
+function addSectionInterior(
+  obstacles: Obstacle[],
+  section: LevelSection,
+  levelNumber: number,
+  rng: Rng
+) {
+  const { endX, gapBottom, gapTop, id, kind, startX } = section;
+  const sectionWidth = endX - startX;
+  const gapHeight = gapBottom - gapTop;
+  const difficulty = (levelNumber - 1) / (MAX_LEVEL - 1);
+
+  switch (kind) {
+    case "hangar": {
+      const width = 34 + difficulty * 14;
+      const height = clamp(gapHeight * (0.34 + rng() * 0.14), 84, gapHeight - 72);
+      const fromTop = rng() > 0.5;
+      const x = startX + sectionWidth * 0.52;
+      const y = fromTop ? gapTop + 16 : gapBottom - height - 16;
+
+      obstacles.push(
+        makeObstacle(`${id}-door`, "hangar", x, y, width, height, 12)
+      );
+      break;
+    }
+    case "rock": {
+      const count = difficulty > 0.52 ? 3 : 2;
+
+      for (let index = 0; index < count; index += 1) {
+        const size = 38 + difficulty * 16 + rng() * 18;
+        const x = startX + sectionWidth * (0.24 + index * 0.24);
+        const y =
+          index % 2 === 0
+            ? gapTop + 18 + rng() * Math.max(12, gapHeight * 0.18)
+            : gapBottom -
+              size -
+              18 -
+              rng() * Math.max(12, gapHeight * 0.18);
+
+        obstacles.push(
+          makeObstacle(`${id}-rock-${index}`, "rock", x, y, size, size, size * 0.32)
+        );
+      }
+      break;
+    }
+    case "space": {
+      if (rng() > 0.52) {
+        const width = 28 + difficulty * 12;
+        const height = clamp(gapHeight * 0.32, 72, 118);
+        const fromTop = rng() > 0.5;
+
+        obstacles.push(
+          makeObstacle(
+            `${id}-gate`,
+            "gate",
+            startX + sectionWidth * 0.58,
+            fromTop ? gapTop + 20 : gapBottom - height - 20,
+            width,
+            height,
+            10
+          )
+        );
+      }
+      break;
+    }
+    case "needle": {
+      const width = 24 + difficulty * 8;
+      const height = clamp(gapHeight * 0.28, 56, 92);
+      const x = startX + sectionWidth * 0.5;
+
+      obstacles.push(
+        makeObstacle(`${id}-needle`, "gate", x, gapTop + 16, width, height, 10)
+      );
+      obstacles.push(
+        makeObstacle(
+          `${id}-needle-b`,
+          "gate",
+          x + width + 20,
+          gapBottom - height - 16,
+          width,
+          height,
+          10
+        )
+      );
+      break;
+    }
+    case "landing":
+    case "launch":
+      break;
+  }
+}
+
+function createLevel(levelNumber: number, arena: ArenaSize): LevelDefinition {
+  const rng = createRng(levelNumber * 81173 + Math.round(arena.width * 17));
+  const difficulty = (levelNumber - 1) / (MAX_LEVEL - 1);
+  const height = Math.round(clamp(Math.max(arena.height * 1.48, 880), 840, 1120));
+  const startPadY = Math.round(height - (176 + difficulty * 34));
+  const startPad: Pad = {
+    height: 14,
+    kind: "start",
+    position: {
+      x: 190,
+      y: startPadY
+    },
+    width: 166
+  };
+  const obstacles: Obstacle[] = [
+    makeObstacle("launch-top", "terrain", 0, 0, 360, 48, 0),
+    makeObstacle(
+      "launch-floor",
+      "platform",
+      0,
+      startPadY,
+      360,
+      height - startPadY,
+      0
+    )
+  ];
+  const sections: LevelSection[] = [
+    {
+      endX: 360,
+      gapBottom: startPadY,
+      gapTop: 48,
+      id: "section-launch",
+      kind: "launch",
+      startX: 0
+    }
+  ];
+  const sectionCount = 8 + Math.floor((levelNumber - 1) / 3);
+  let cursorX = 360;
+  let corridorCenter = clamp(startPadY - 180, 220, height - 220);
+
+  for (let index = 1; index < sectionCount; index += 1) {
+    const kind = pickSectionKind(index, sectionCount, levelNumber, rng);
+    const sectionWidth = Math.round(
+      randomBetween(rng, 250, 360) + difficulty * 74
+    );
+    const shiftAmount = randomBetween(
+      rng,
+      -(72 + levelNumber * 2.8),
+      72 + levelNumber * 2.8
+    );
+    const gapHeight = getSectionGap(levelNumber, kind, rng);
+
+    corridorCenter = clamp(
+      corridorCenter + shiftAmount,
+      180 + gapHeight / 2,
+      height - 180 - gapHeight / 2
+    );
+
+    const gapTop = Math.round(
+      clamp(corridorCenter - gapHeight / 2, 56, height - gapHeight - 96)
+    );
+    const gapBottom = Math.round(gapTop + gapHeight);
+    const section: LevelSection = {
+      endX: cursorX + sectionWidth,
+      gapBottom,
+      gapTop,
+      id: `section-${index}`,
+      kind,
+      startX: cursorX
+    };
+
+    sections.push(section);
+    obstacles.push(
+      makeObstacle(
+        `${section.id}-ceiling`,
+        kind === "rock" ? "rock" : "terrain",
+        cursorX,
+        0,
+        sectionWidth,
+        gapTop,
+        0
+      ),
+      makeObstacle(
+        `${section.id}-floor`,
+        kind === "hangar" || kind === "landing" ? "hangar" : "terrain",
+        cursorX,
+        gapBottom,
+        sectionWidth,
+        height - gapBottom,
+        0
+      )
+    );
+    addSectionInterior(obstacles, section, levelNumber, rng);
+    cursorX += sectionWidth;
+  }
+
+  const finalSection = sections[sections.length - 1];
+  const landingPadY = finalSection.gapBottom;
+  const finishPad: Pad = {
+    height: 14,
+    kind: "finish",
+    position: {
+      x: finalSection.endX - Math.min(150, (finalSection.endX - finalSection.startX) * 0.28),
+      y: landingPadY
+    },
+    width: clamp(146 - levelNumber, 102, 146)
+  };
+  const width = Math.round(cursorX + 120);
+
+  return {
+    difficulty,
+    finishPad,
+    height,
+    number: levelNumber,
+    obstacles,
+    sections,
+    stars: createStars(width, height, rng),
+    startPad,
+    width
+  };
+}
+
+function getPadByKind(level: LevelDefinition, kind: "start" | "finish") {
+  return kind === "finish" ? level.finishPad : level.startPad;
+}
+
+function getRestingPosition(pad: Pad): Vector {
+  return {
+    x: pad.position.x,
+    y: pad.position.y - ROCKET_HEIGHT * 0.48 - 4
+  };
+}
+
+function createRocket(level: LevelDefinition): Rocket {
+  return {
+    angle: 0,
+    height: ROCKET_HEIGHT,
+    landed: true,
+    launched: false,
+    position: getRestingPosition(level.startPad),
+    radius: ROCKET_RADIUS,
+    restingPad: "start",
+    thrusting: false,
+    velocity: { x: 0, y: 0 },
+    width: ROCKET_WIDTH
+  };
+}
+
+function getCameraTarget(
+  arena: ArenaSize,
+  level: LevelDefinition,
+  rocket: Rocket,
+  section: LevelSection,
+  deltaSeconds: number,
+  previousCamera?: Camera
+): Camera {
+  const velocityLookAhead = clamp(rocket.velocity.x * 0.34, -60, 220);
+  const finishDistance = level.finishPad.position.x - rocket.position.x;
+  const precisionBias =
+    section.kind === "landing" || section.kind === "needle" ? 1 : 0;
+  const corridorTightness = clamp((250 - (section.gapBottom - section.gapTop)) / 120, 0, 1);
+  const speedFactor = clamp(
+    Math.hypot(rocket.velocity.x, rocket.velocity.y) / 420,
+    0,
+    1
+  );
+  const targetZoom = clamp(
+    0.76 + corridorTightness * 0.42 + precisionBias * 0.08 - speedFactor * 0.1,
+    0.7,
+    1.24
+  );
+  const lookAhead =
+    finishDistance < 420
+      ? clamp(90 + finishDistance * 0.14, 48, 140)
+      : 132 + velocityLookAhead;
+  const halfVisibleWidth = arena.width / (targetZoom * 2);
+  const halfVisibleHeight = arena.height / (targetZoom * 2);
+  const targetCenter = {
+    x: clamp(
+      rocket.position.x + lookAhead,
+      halfVisibleWidth,
+      level.width - halfVisibleWidth
+    ),
+    y: clamp(
+      finishDistance < 340
+        ? level.finishPad.position.y - 120
+        : rocket.position.y + rocket.velocity.y * 0.16,
+      halfVisibleHeight,
+      level.height - halfVisibleHeight
+    )
+  };
+
+  if (!previousCamera) {
+    return {
+      center: targetCenter,
+      zoom: targetZoom
+    };
+  }
+
+  const smoothing = clamp(deltaSeconds * 4.6, 0, 1);
+
+  return {
+    center: {
+      x: previousCamera.center.x + (targetCenter.x - previousCamera.center.x) * smoothing,
+      y: previousCamera.center.y + (targetCenter.y - previousCamera.center.y) * smoothing
+    },
+    zoom: previousCamera.zoom + (targetZoom - previousCamera.zoom) * smoothing
+  };
+}
+
+function findSection(level: LevelDefinition, x: number): LevelSection {
+  const section =
+    level.sections.find((item) => x >= item.startX && x <= item.endX) ??
+    level.sections[level.sections.length - 1];
+
+  return section;
+}
+
+function circleHitsRect(position: Vector, radius: number, obstacle: Obstacle) {
+  const closestX = clamp(
+    position.x,
+    obstacle.position.x,
+    obstacle.position.x + obstacle.size.x
+  );
+  const closestY = clamp(
+    position.y,
+    obstacle.position.y,
+    obstacle.position.y + obstacle.size.y
+  );
+
+  return Math.hypot(position.x - closestX, position.y - closestY) <= radius;
+}
+
+function getLandingMetrics(rocket: Rocket): LandingMetrics {
+  return {
+    angleDegrees: Math.round(Math.abs((rocket.angle * 180) / Math.PI)),
+    horizontalSpeed: Math.round(Math.abs(rocket.velocity.x)),
+    totalSpeed: Math.round(Math.hypot(rocket.velocity.x, rocket.velocity.y)),
+    verticalSpeed: Math.round(Math.abs(rocket.velocity.y))
+  };
+}
+
+export function getLandingThresholds(levelNumber: number): LandingThresholds {
+  const difficulty = (levelNumber - 1) / (MAX_LEVEL - 1);
+
+  return {
+    angleDegrees: Math.round(clamp(18 - difficulty * 8, 10, 18)),
+    horizontalSpeed: Math.round(clamp(164 - difficulty * 48, 104, 164)),
+    verticalSpeed: Math.round(clamp(146 - difficulty * 52, 94, 146))
+  };
+}
+
+function isSafeLanding(levelNumber: number, metrics: LandingMetrics) {
+  const thresholds = getLandingThresholds(levelNumber);
+
+  return (
+    metrics.angleDegrees <= thresholds.angleDegrees &&
+    metrics.horizontalSpeed <= thresholds.horizontalSpeed &&
+    metrics.verticalSpeed <= thresholds.verticalSpeed
+  );
+}
+
+function getPadContact(rocket: Rocket, pad: Pad): boolean {
+  const rocketFeetY = rocket.position.y + rocket.height * 0.48;
+  const horizontalOffset = Math.abs(rocket.position.x - pad.position.x);
+
+  return (
+    rocket.velocity.y >= -30 &&
+    horizontalOffset <= pad.width * 0.5 - 8 &&
+    rocket.position.y < pad.position.y + 24 &&
+    Math.abs(rocketFeetY - pad.position.y) <= 18
+  );
+}
+
+function stampEvent(world: GameWorld, event: GameWorld["event"]): GameWorld {
   return {
     ...world,
     event,
@@ -73,408 +507,79 @@ function stampEvent(world: GameWorld, event: GameWorld["event"]) {
   };
 }
 
-function makeRocket(levelData: LevelData): Rocket {
-  return {
-    angle: -0.12,
-    position: {
-      x: levelData.startPad.x + levelData.startPad.width * 0.46,
-      y: levelData.startPad.y - ROCKET_RADIUS - 4
-    },
-    radius: ROCKET_RADIUS,
-    thrusting: false,
-    velocity: {
-      x: 0,
-      y: 0
-    }
-  };
-}
-
-function nearestObstacleDistance(levelData: LevelData, rocket: Rocket) {
-  let nearest = Number.POSITIVE_INFINITY;
-
-  for (const obstacle of levelData.obstacles) {
-    const edgeX =
-      obstacle.shape === "rect"
-        ? obstacle.x
-        : obstacle.x - obstacle.radius;
-    const nextDistance = edgeX - rocket.position.x;
-
-    if (nextDistance >= -120) {
-      nearest = Math.min(nearest, nextDistance);
-    }
-  }
-
-  return nearest;
-}
-
-function targetCamera(
-  arena: ArenaSize,
-  levelData: LevelData,
-  rocket: Rocket,
-  status: GameWorld["status"]
-) {
-  if (!arena.width || !arena.height) {
-    return {
-      center: {
-        x: rocket.position.x,
-        y: rocket.position.y
-      },
-      zoom: 1
-    };
-  }
-
-  const goalDistance = Math.max(0, levelData.goalPad.x - rocket.position.x);
-  const obstacleDistance = nearestObstacleDistance(levelData, rocket);
-  const velocityStress = clamp(Math.abs(rocket.velocity.y) / 360, 0, 1);
-  const obstaclePressure =
-    obstacleDistance === Number.POSITIVE_INFINITY
-      ? 0
-      : 1 - clamp(obstacleDistance / 560, 0, 1);
-  const goalPressure = 1 - clamp(goalDistance / 720, 0, 1);
-  const settlePressure =
-    status === "ready" ? 0.4 : status === "running" ? 0 : 0.55;
-
-  const zoom = clamp(
-    1.08 -
-      obstaclePressure * 0.24 -
-      goalPressure * 0.18 -
-      velocityStress * 0.14 -
-      settlePressure * 0.22,
-    0.66,
-    1.08
-  );
-  const visibleWidth = arena.width / zoom;
-  const visibleHeight = arena.height / zoom;
-  const lookAhead =
-    status === "ready"
-      ? 300
-      : status === "running"
-        ? clamp(240 + Math.max(rocket.velocity.x, 0) * 0.55, 220, 380)
-        : 180;
-  const targetX =
-    status === "ready"
-      ? levelData.startPad.x + 340
-      : status === "running"
-        ? rocket.position.x + lookAhead
-        : levelData.goalPad.x + levelData.goalPad.width * 0.2;
-  const targetY =
-    status === "ready"
-      ? levelData.startPad.y - 24
-      : status === "running"
-        ? rocket.position.y + rocket.velocity.y * 0.12
-        : levelData.goalPad.y - 8;
-
-  return {
-    center: {
-      x: clamp(
-        targetX,
-        visibleWidth / 2 + 24,
-        levelData.width - visibleWidth / 2 - 24
-      ),
-      y: clamp(
-        targetY,
-        visibleHeight / 2 + 24,
-        levelData.height - visibleHeight / 2 - 24
-      )
-    },
-    zoom
-  };
-}
-
-function resolveCamera(
-  camera: Camera | undefined,
-  arena: ArenaSize,
-  levelData: LevelData,
-  rocket: Rocket,
-  status: GameWorld["status"]
-): Camera {
-  const target = targetCamera(arena, levelData, rocket, status);
-
-  if (!camera) {
-    return target;
-  }
-
-  return {
-    center: {
-      x:
-        camera.center.x +
-        (target.center.x - camera.center.x) * CAMERA_SMOOTHING,
-      y:
-        camera.center.y +
-        (target.center.y - camera.center.y) * CAMERA_SMOOTHING
-    },
-    zoom: camera.zoom + (target.zoom - camera.zoom) * CAMERA_SMOOTHING
-  };
-}
-
-function buildStars(
-  rng: () => number,
-  width: number,
-  height: number,
-  count: number
-) {
-  const stars: Star[] = [];
-
-  for (let index = 0; index < count; index += 1) {
-    stars.push({
-      alpha: randomBetween(rng, 0.24, 0.95),
-      depth: randomBetween(rng, 0.45, 1),
-      id: `star-${index}`,
-      position: {
-        x: randomBetween(rng, 0, width),
-        y: randomBetween(rng, WORLD_MARGIN_TOP * 0.5, height - WORLD_MARGIN_BOTTOM * 0.4)
-      },
-      size: randomBetween(rng, 1, 3.3)
-    });
-  }
-
-  return stars;
-}
-
-function circleHitsRect(
-  position: Vector,
-  radius: number,
-  obstacle: Extract<Obstacle, { shape: "rect" }>
-) {
-  const nearestX = clamp(position.x, obstacle.x, obstacle.x + obstacle.width);
-  const nearestY = clamp(position.y, obstacle.y, obstacle.y + obstacle.height);
-
-  return distance(position, { x: nearestX, y: nearestY }) <= radius;
-}
-
-function collidesWithObstacle(rocket: Rocket, obstacle: Obstacle) {
-  if (obstacle.shape === "rect") {
-    return circleHitsRect(rocket.position, rocket.radius, obstacle);
-  }
-
-  return (
-    distance(rocket.position, { x: obstacle.x, y: obstacle.y }) <=
-    rocket.radius + obstacle.radius
-  );
-}
-
-function buildLevel(level: number, arena: ArenaSize): LevelData {
-  const seed =
-    level * 97 +
-    Math.round(arena.width * 3.1) +
-    Math.round(arena.height * 7.3);
-  const rng = createRng(seed);
-  const width = Math.round(
-    clamp(Math.max(arena.width * 2.8, 1700) + level * 140, 1700, 5200)
-  );
-  const height = Math.round(
-    clamp(Math.max(arena.height * 1.18, 680), 680, 960)
-  );
-  const startPadY = Math.round(
-    randomBetween(rng, height * 0.34, height * 0.7)
-  );
-  const goalPadY = Math.round(
-    clamp(
-      startPadY + randomBetween(rng, -height * 0.22, height * 0.22),
-      132,
-      height - 132
-    )
-  );
-  const startPad = {
-    height: 18,
-    label: "LAUNCH",
-    side: "left" as const,
-    width: 168,
-    x: 92,
-    y: startPadY
-  };
-  const goalPad = {
-    height: 18,
-    label: "PAD",
-    side: "right" as const,
-    width: Math.round(clamp(156 - level * 2.2, 104, 156)),
-    x: width - 220,
-    y: goalPadY
-  };
-  const corridor: Vector[] = [];
-  const obstacles: Obstacle[] = [];
-  const waypointCount = 7 + Math.floor(level / 3);
-  const startX = startPad.x + startPad.width + 56;
-  const endX = goalPad.x - 88;
-  let pathY = startPad.y - 54;
-
-  for (let index = 0; index < waypointCount; index += 1) {
-    const progress =
-      waypointCount <= 1 ? 0 : index / (waypointCount - 1);
-
-    if (index === 0) {
-      corridor.push({
-        x: startX,
-        y: pathY
-      });
-      continue;
-    }
-
-    if (index === waypointCount - 1) {
-      corridor.push({
-        x: endX,
-        y: goalPad.y - 54
-      });
-      continue;
-    }
-
-    pathY = clamp(
-      pathY + randomBetween(rng, -height * 0.18, height * 0.18),
-      138,
-      height - 138
-    );
-
-    corridor.push({
-      x:
-        startX +
-        (endX - startX) * progress +
-        randomBetween(rng, -68, 68),
-      y: pathY
-    });
-  }
-
-  const gapBase = clamp(356 - level * 5.4, 190, 356);
-
-  for (let index = 1; index < corridor.length - 1; index += 1) {
-    const point = corridor[index];
-    const obstacleWidth = Math.round(
-      clamp(102 + level * 3.2 + randomBetween(rng, 0, 54), 96, 190)
-    );
-    const gap = clamp(gapBase + randomBetween(rng, -42, 42), 178, 372);
-    const topEnd = point.y - gap / 2;
-    const bottomStart = point.y + gap / 2;
-    const createTop = topEnd - WORLD_MARGIN_TOP > 74;
-    const createBottom =
-      height - WORLD_MARGIN_BOTTOM - bottomStart > 74;
-    const paired = index % 2 === 1 || rng() > 0.45;
-
-    if (createTop && (paired || rng() > 0.35)) {
-      obstacles.push({
-        height: Math.round(topEnd - WORLD_MARGIN_TOP),
-        id: `top-${index}`,
-        kind: paired ? "tunnel" : "hangar",
-        shape: "rect",
-        width: obstacleWidth,
-        x: point.x - obstacleWidth * 0.5,
-        y: WORLD_MARGIN_TOP
-      });
-    }
-
-    if (createBottom && (paired || rng() > 0.35)) {
-      obstacles.push({
-        height: Math.round(height - WORLD_MARGIN_BOTTOM - bottomStart),
-        id: `bottom-${index}`,
-        kind: paired ? "tunnel" : "hangar",
-        shape: "rect",
-        width: obstacleWidth,
-        x: point.x - obstacleWidth * 0.45,
-        y: bottomStart
-      });
-    }
-  }
-
-  const rockCount = 1 + Math.floor(level / 4);
-
-  for (let index = 0; index < rockCount; index += 1) {
-    const anchor =
-      corridor[1 + Math.floor(rng() * Math.max(1, corridor.length - 2))] ??
-      corridor[Math.max(0, corridor.length - 1)];
-    const radius = Math.round(
-      clamp(24 + level * 0.4 + randomBetween(rng, 0, 14), 22, 42)
-    );
-    const yOffset =
-      (rng() > 0.5 ? 1 : -1) * gapBase * randomBetween(rng, 0.22, 0.34);
-
-    obstacles.push({
-      id: `rock-${index}`,
-      kind: "rock",
-      radius,
-      shape: "circle",
-      x: clamp(
-        anchor.x + randomBetween(rng, -64, 64),
-        startPad.x + 300,
-        goalPad.x - 140
-      ),
-      y: clamp(
-        anchor.y + yOffset,
-        WORLD_MARGIN_TOP + radius + 16,
-        height - WORLD_MARGIN_BOTTOM - radius - 16
-      )
-    });
-  }
-
-  return {
-    accentColor: LEVEL_ACCENTS[(level - 1) % LEVEL_ACCENTS.length],
-    corridor,
-    goalPad,
-    height,
-    name: LEVEL_NAMES[(level - 1) % LEVEL_NAMES.length],
-    number: level,
-    obstacles,
-    stars: buildStars(rng, width, height, 46 + Math.floor(level / 2)),
-    startPad,
-    width
-  };
-}
-
-function createCrashWorld(world: GameWorld, reason: string) {
+function createCrashState(
+  world: GameWorld,
+  reason: FailureReason,
+  message: string,
+  rocket: Rocket
+): GameWorld {
   return stampEvent(
     {
       ...world,
       failureReason: reason,
-      gameOver: true,
+      landingMetrics:
+        reason === "hard-landing" || reason === "bad-angle"
+          ? getLandingMetrics(rocket)
+          : null,
+      message,
       rocket: {
-        ...world.rocket,
-        angle: Math.min(world.rocket.angle + 0.32, 1.18),
-        thrusting: false,
-        velocity: {
-          x: 0,
-          y: 0
-        }
+        ...rocket,
+        thrusting: false
       },
-      status: "failed"
+      status: "crashed"
     },
     "crash"
   );
 }
 
-export function createWorld(arena: ArenaSize, level = 1): GameWorld {
-  const currentLevel = clamp(Math.round(level), 1, MAX_LEVEL);
-  const levelData = buildLevel(currentLevel, arena);
-  const rocket = makeRocket(levelData);
-  const safeLandingSpeed = Math.round(
-    clamp(186 - currentLevel * 1.8, 124, 186)
-  );
+function getSectionMessage(kind: LevelSectionKind) {
+  switch (kind) {
+    case "launch":
+      return "Lift off clean and set up the line.";
+    case "space":
+      return "Open space. Build speed before the next choke point.";
+    case "hangar":
+      return "Hangar girders ahead. Stay precise.";
+    case "rock":
+      return "Rock tunnel ahead. Hold your arc.";
+    case "needle":
+      return "Needle route. Tiny corrections only.";
+    case "landing":
+      return "Landing corridor. Bleed speed and stand the rocket up.";
+  }
+}
+
+function buildWorld(arena: ArenaSize, levelNumber: number): GameWorld {
+  const level = createLevel(levelNumber, arena);
+  const rocket = createRocket(level);
+  const section = findSection(level, rocket.position.x);
+  const camera = getCameraTarget(arena, level, rocket, section, 0, undefined);
 
   return {
     arena,
-    camera: resolveCamera(undefined, arena, levelData, rocket, "ready"),
-    currentLevel,
+    camera,
+    currentSectionKind: section.kind,
     event: "none",
     eventNonce: 0,
     failureReason: null,
-    gameOver: false,
-    levelData,
+    landingMetrics: null,
+    level,
+    levelNumber,
     maxLevel: MAX_LEVEL,
+    message: getSectionMessage(section.kind),
+    progress: 0,
     rocket,
-    safeLandingSpeed,
-    status: "ready",
+    status: "playing",
     time: 0
   };
 }
 
+export function createWorld(arena: ArenaSize, levelNumber = 1): GameWorld {
+  return buildWorld(arena, clamp(Math.round(levelNumber), 1, MAX_LEVEL));
+}
+
 export function resizeWorld(world: GameWorld, arena: ArenaSize): GameWorld {
-  return {
-    ...world,
-    arena,
-    camera: resolveCamera(
-      world.camera,
-      arena,
-      world.levelData,
-      world.rocket,
-      world.status
-    )
-  };
+  return createWorld(arena, world.levelNumber);
 }
 
 export function updateWorld(
@@ -482,20 +587,75 @@ export function updateWorld(
   input: GameInput,
   deltaSeconds: number
 ): GameWorld {
-  if (world.status === "failed" || world.status === "landed") {
+  if (world.status !== "playing") {
     return world;
   }
 
-  if (world.status === "campaign-complete") {
-    return {
-      ...world,
-      camera: resolveCamera(
-        world.camera,
-        world.arena,
-        world.levelData,
-        world.rocket,
-        world.status
-      )
+  const steer = clamp(input.steer, -1, 1);
+  const targetAngle = steer * MAX_STEER_ANGLE;
+  const rotationBlend = clamp(deltaSeconds * ROTATION_RESPONSE, 0, 1);
+  const gravity = 600 + world.levelNumber * 8.5;
+  const thrustPower = 940 + world.levelNumber * 11;
+  const maxSpeed = 510 + world.levelNumber * 11;
+  const angle =
+    world.rocket.angle + (targetAngle - world.rocket.angle) * rotationBlend;
+  let rocket: Rocket = {
+    ...world.rocket,
+    angle,
+    thrusting: input.thrust
+  };
+
+  if (rocket.landed && !input.thrust && rocket.restingPad) {
+    const pad = getPadByKind(world.level, rocket.restingPad);
+    rocket = {
+      ...rocket,
+      angle: angle + (0 - angle) * clamp(deltaSeconds * 6, 0, 1),
+      position: getRestingPosition(pad),
+      thrusting: false,
+      velocity: { x: 0, y: 0 }
+    };
+  } else {
+    if (rocket.landed && input.thrust) {
+      rocket = {
+        ...rocket,
+        landed: false,
+        launched: true,
+        restingPad: null,
+        position: {
+          ...rocket.position,
+          y: rocket.position.y - 2
+        }
+      };
+    }
+
+    const thrust = input.thrust ? thrustPower : 0;
+    const acceleration = {
+      x: Math.sin(angle) * thrust,
+      y: gravity - Math.cos(angle) * thrust
+    };
+    const velocity = {
+      x:
+        (rocket.velocity.x + acceleration.x * deltaSeconds) /
+        (1 + HORIZONTAL_DRAG * deltaSeconds),
+      y:
+        (rocket.velocity.y + acceleration.y * deltaSeconds) /
+        (1 + VERTICAL_DRAG * deltaSeconds)
+    };
+    const speed = Math.hypot(velocity.x, velocity.y);
+    const speedScale = speed > maxSpeed ? maxSpeed / speed : 1;
+
+    rocket = {
+      ...rocket,
+      landed: false,
+      launched: rocket.launched || input.thrust,
+      position: {
+        x: rocket.position.x + velocity.x * speedScale * deltaSeconds,
+        y: rocket.position.y + velocity.y * speedScale * deltaSeconds
+      },
+      velocity: {
+        x: velocity.x * speedScale,
+        y: velocity.y * speedScale
+      }
     };
   }
 
@@ -503,187 +663,126 @@ export function updateWorld(
     ...world,
     event: "none",
     failureReason: null,
-    rocket: {
-      ...world.rocket,
-      thrusting: input.thrust
-    },
+    landingMetrics: null,
+    rocket,
     time: world.time + deltaSeconds
   };
 
-  if (nextWorld.status === "ready" && (input.tap || input.thrust)) {
+  const outOfBounds =
+    rocket.position.x < -60 ||
+    rocket.position.x > world.level.width + 60 ||
+    rocket.position.y < -80 ||
+    rocket.position.y > world.level.height + 80;
+
+  if (outOfBounds) {
+    return createCrashState(
+      nextWorld,
+      "out-of-bounds",
+      "You drifted out of the flight corridor. The run resets to level 1.",
+      rocket
+    );
+  }
+
+  for (const pad of [world.level.finishPad, world.level.startPad]) {
+    if (!getPadContact(rocket, pad)) {
+      continue;
+    }
+
+    const metrics = getLandingMetrics(rocket);
+
+    if (!isSafeLanding(world.levelNumber, metrics)) {
+      return createCrashState(
+        nextWorld,
+        metrics.angleDegrees > getLandingThresholds(world.levelNumber).angleDegrees
+          ? "bad-angle"
+          : "hard-landing",
+        "Landing was too aggressive. The run resets to level 1.",
+        rocket
+      );
+    }
+
+    const settledRocket: Rocket = {
+      ...rocket,
+      angle: 0,
+      landed: true,
+      position: getRestingPosition(pad),
+      restingPad: pad.kind,
+      thrusting: false,
+      velocity: { x: 0, y: 0 }
+    };
+
+    if (pad.kind === "finish") {
+      const isRunComplete = world.levelNumber >= world.maxLevel;
+
+      return stampEvent(
+        {
+          ...nextWorld,
+          landingMetrics: metrics,
+          message: isRunComplete
+            ? "All 30 levels cleared. Start a new run from level 1."
+            : `Level ${world.levelNumber} clear. Set up for level ${
+                world.levelNumber + 1
+              }.`,
+          progress: 1,
+          rocket: settledRocket,
+          status: isRunComplete ? "run-complete" : "level-complete"
+        },
+        isRunComplete ? "run-complete" : "level-complete"
+      );
+    }
+
     nextWorld = stampEvent(
       {
         ...nextWorld,
-        rocket: {
-          ...nextWorld.rocket,
-          angle: -0.42,
-          thrusting: input.thrust,
-          velocity: {
-            x: BASE_FORWARD_SPEED + nextWorld.currentLevel * FORWARD_SPEED_STEP * 0.6,
-            y: LAUNCH_UPWARD_VELOCITY
-          }
-        },
-        status: "running"
+        landingMetrics: metrics,
+        message: "Stable on the launch deck. Thrust to relaunch.",
+        rocket: settledRocket
       },
-      "launch"
+      "landing"
+    );
+    break;
+  }
+
+  if (nextWorld.status !== "playing") {
+    return nextWorld;
+  }
+
+  const collided = world.level.obstacles.some((obstacle) =>
+    circleHitsRect(nextWorld.rocket.position, nextWorld.rocket.radius, obstacle)
+  );
+
+  if (collided) {
+    return createCrashState(
+      nextWorld,
+      "obstacle",
+      "Impact detected. Fail a level and the run goes back to level 1.",
+      nextWorld.rocket
     );
   }
 
-  if (nextWorld.status !== "running") {
-    return {
-      ...nextWorld,
-      camera: resolveCamera(
-        nextWorld.camera,
-        nextWorld.arena,
-        nextWorld.levelData,
-        nextWorld.rocket,
-        nextWorld.status
-      )
-    };
-  }
-
-  const targetForwardSpeed =
-    BASE_FORWARD_SPEED + nextWorld.currentLevel * FORWARD_SPEED_STEP;
-  const verticalImpulse = input.tap ? TAP_IMPULSE : 0;
-  const velocityX =
-    nextWorld.rocket.velocity.x +
-    (targetForwardSpeed + (input.thrust ? 22 : 0) - nextWorld.rocket.velocity.x) *
-      Math.min(1, 2.8 * deltaSeconds);
-  const velocityY = clamp(
-    nextWorld.rocket.velocity.y +
-      GRAVITY * deltaSeconds -
-      (input.thrust ? THRUST_ACCELERATION * deltaSeconds : 0) -
-      verticalImpulse,
-    -520,
-    520
-  );
-  const position = {
-    x: nextWorld.rocket.position.x + velocityX * deltaSeconds,
-    y: nextWorld.rocket.position.y + velocityY * deltaSeconds
-  };
-  const targetAngle = clamp(
-    velocityY / 360 + (input.thrust ? -0.58 : 0.22),
-    -1.06,
-    1.08
-  );
-
-  nextWorld = {
-    ...nextWorld,
-    rocket: {
-      ...nextWorld.rocket,
-      angle:
-        nextWorld.rocket.angle +
-        (targetAngle - nextWorld.rocket.angle) * Math.min(1, 7 * deltaSeconds),
-      position,
-      thrusting: input.thrust,
-      velocity: {
-        x: velocityX,
-        y: velocityY
-      }
-    }
-  };
-
-  const topLimit = WORLD_MARGIN_TOP + nextWorld.rocket.radius;
-  const bottomLimit =
-    nextWorld.levelData.height - WORLD_MARGIN_BOTTOM - nextWorld.rocket.radius;
-
-  if (nextWorld.rocket.position.y <= topLimit) {
-    nextWorld = createCrashWorld(nextWorld, "You clipped the upper corridor.");
-  } else if (nextWorld.rocket.position.y >= bottomLimit) {
-    nextWorld = createCrashWorld(nextWorld, "Gravity pulled you into the lower wall.");
-  }
-
-  if (!nextWorld.gameOver) {
-    const collided = nextWorld.levelData.obstacles.find((obstacle) =>
-      collidesWithObstacle(nextWorld.rocket, obstacle)
-    );
-
-    if (collided) {
-      nextWorld = createCrashWorld(
-        nextWorld,
-        collided.kind === "rock"
-          ? "You sheared into a rock shelf."
-          : "You clipped the hangar wall."
-      );
-    }
-  }
-
-  if (!nextWorld.gameOver) {
-    const { goalPad } = nextWorld.levelData;
-    const insidePadX =
-      nextWorld.rocket.position.x >= goalPad.x - nextWorld.rocket.radius &&
-      nextWorld.rocket.position.x <=
-        goalPad.x + goalPad.width + nextWorld.rocket.radius;
-    const touchingPadSurface =
-      nextWorld.rocket.position.y + nextWorld.rocket.radius >= goalPad.y - 4 &&
-      nextWorld.rocket.position.y - nextWorld.rocket.radius <=
-        goalPad.y + goalPad.height + 12;
-
-    if (insidePadX && touchingPadSurface) {
-      if (
-        nextWorld.rocket.position.x >= goalPad.x + 10 &&
-        nextWorld.rocket.position.x <= goalPad.x + goalPad.width - 10 &&
-        Math.abs(nextWorld.rocket.velocity.y) <= nextWorld.safeLandingSpeed
-      ) {
-        nextWorld = stampEvent(
-          {
-            ...nextWorld,
-            gameOver: true,
-            rocket: {
-              ...nextWorld.rocket,
-              angle: 0,
-              position: {
-                x: clamp(
-                  nextWorld.rocket.position.x,
-                  goalPad.x + 18,
-                  goalPad.x + goalPad.width - 18
-                ),
-                y: goalPad.y - nextWorld.rocket.radius - 2
-              },
-              thrusting: false,
-              velocity: {
-                x: 0,
-                y: 0
-              }
-            },
-            status:
-              nextWorld.currentLevel >= nextWorld.maxLevel
-                ? "campaign-complete"
-                : "landed"
-          },
-          nextWorld.currentLevel >= nextWorld.maxLevel
-            ? "campaign-complete"
-            : "level-complete"
-        );
-      } else {
-        nextWorld = createCrashWorld(
-          nextWorld,
-          Math.abs(nextWorld.rocket.velocity.y) > nextWorld.safeLandingSpeed
-            ? `Touchdown speed ${Math.round(
-                Math.abs(nextWorld.rocket.velocity.y)
-              )} was too hard.`
-            : "You reached the pad off-center."
-        );
-      }
-    }
-  }
-
-  if (
-    !nextWorld.gameOver &&
-    nextWorld.rocket.position.x - nextWorld.rocket.radius >
-      nextWorld.levelData.goalPad.x + nextWorld.levelData.goalPad.width + 96
-  ) {
-    nextWorld = createCrashWorld(nextWorld, "You flew past the landing pad.");
-  }
+  const section = findSection(world.level, nextWorld.rocket.position.x);
+  const sectionMessage =
+    nextWorld.rocket.landed && nextWorld.rocket.restingPad === "start"
+      ? "Stable on the launch deck. Thrust to relaunch."
+      : getSectionMessage(section.kind);
 
   return {
     ...nextWorld,
-    camera: resolveCamera(
-      nextWorld.camera,
-      nextWorld.arena,
-      nextWorld.levelData,
+    camera: getCameraTarget(
+      world.arena,
+      world.level,
       nextWorld.rocket,
-      nextWorld.status
+      section,
+      deltaSeconds,
+      world.camera
+    ),
+    currentSectionKind: section.kind,
+    message: sectionMessage,
+    progress: clamp(
+      (nextWorld.rocket.position.x - world.level.startPad.position.x) /
+        (world.level.finishPad.position.x - world.level.startPad.position.x),
+      0,
+      1
     )
   };
 }

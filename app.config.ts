@@ -2,9 +2,9 @@ import type { ConfigContext, ExpoConfig } from "expo/config";
 
 export default ({ config }: ConfigContext): ExpoConfig => ({
   ...config,
-  name: "Launch",
-  slug: "launch",
-  scheme: "launch",
+  name: "Launch3001",
+  slug: "launch3001",
+  scheme: "launch3001",
   version: "1.0.0",
   orientation: "default",
   userInterfaceStyle: "automatic",
@@ -16,10 +16,10 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   ios: {
     supportsTablet: true,
     requireFullScreen: true,
-    bundleIdentifier: "com.bigslickgames.launch"
+    bundleIdentifier: "com.bigslickgames.launch3001"
   },
   android: {
-    package: "com.bigslickgames.launch",
+    package: "com.bigslickgames.launch3001",
     adaptiveIcon: {
       backgroundColor: "#07111f"
     }
@@ -31,6 +31,13 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   plugins: [
     "expo-router",
     "expo-asset",
+    [
+      "expo-sensors",
+      {
+        motionPermission:
+          "Launch3001 uses motion controls so you can tilt the rocket through lunar tunnels."
+      }
+    ],
     [
       "expo-screen-orientation",
       {

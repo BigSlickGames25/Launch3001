@@ -21,7 +21,7 @@ export function HowToPlayScreen() {
         wide={isWide}
       />
       <InfoCard
-        body="Each level begins on a left-side launch deck, then pushes through open space, hangars, rock tunnels, and narrow routes before a final landing pad."
+        body="Each level begins on a left-side launch deck, then pushes through open space, moon tunnels, hangars, rock corridors, and narrow routes before a final landing pad."
         compact={isCompact}
         title="Level Shape"
         wide={isWide}
@@ -39,15 +39,15 @@ export function HowToPlayScreen() {
         wide={isWide}
       />
       <InfoCard
-        body="If device motion is unavailable, Launch exposes a touch steering fallback so the prototype remains playable. The intended final input is still phone tilt."
+        body="If device motion is unavailable, Launch3001 exposes a touch steering fallback so the prototype remains playable. The intended final input is still phone tilt."
         compact={isCompact}
         title="Fallback Input"
         wide={isWide}
       />
       <InfoCard
-        body="Rocket.obj, Rocket.mtl, Launchpad.obj, Launchpad.mtl, rocket.glb, and launchpad.glb are in the repo. Native gameplay now renders the GLB assets. The browser path keeps the 2D fallback for stability."
+        body="The target presentation is retro lunar arcade: dark space, moon-dust corridors, glowing pads, and a chunky pixel-leaning HUD. Native gameplay uses the model assets, while web keeps the 2D fallback for stability."
         compact={isCompact}
-        title="Asset Note"
+        title="Art Direction"
         wide={isWide}
       />
     </ScreenContainer>
@@ -97,7 +97,7 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.card,
     borderColor: theme.colors.border,
     borderRadius: theme.radius.xl,
-    borderWidth: 1,
+    borderWidth: 2,
     gap: theme.spacing.sm,
     padding: theme.spacing.lg,
     width: "100%"

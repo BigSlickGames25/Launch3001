@@ -80,15 +80,16 @@ export const hubProducts: HubProduct[] = [
     id: "launch3001",
     slug: "launch3001",
     title: "Launch3001",
-    kind: "app",
-    description: "Launcher-style app that can route players into multiple games.",
+    kind: "game",
+    description: "Retro lunar rocket runner with tap boost, gyro steering, and soft landings.",
     capabilities: [
       ...coreHubCapabilities
     ]
   }
 ];
 
-export const defaultHubProduct = hubProducts[0];
+export const defaultHubProduct =
+  hubProducts.find((product) => product.id === "launch3001") ?? hubProducts[0];
 
 export function getHubProduct(productId?: string | null) {
   return hubProducts.find((product) => product.id === productId) ?? defaultHubProduct;

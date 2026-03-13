@@ -37,7 +37,7 @@ export function HomeScreen() {
             isCompact && styles.compactCard
           ]}
         >
-          <Text style={styles.kicker}>80s Sci-Fi Skill Run</Text>
+          <Text style={styles.kicker}>Launch3001</Text>
           <Text
             style={[
               styles.title,
@@ -47,15 +47,17 @@ export function HomeScreen() {
               }
             ]}
           >
-            Launch the rocket. Survive all 30 levels in one run.
+            Survive 30 moon-tunnel sectors in one run.
           </Text>
           <Text style={styles.description}>
-            Tilt steers the nose, hold thrust to burn, gravity never stops, and
-            every failed landing or collision throws the run back to level 1.
+            Tilt steers the rocket through lunar corridors, hold thrust to burn
+            against gravity, and land softly on the right-side pad. Any crash
+            or hard touchdown throws the run back to level 1.
           </Text>
           <View style={styles.inlineChips}>
             <InlineChip label="Tilt steer" />
             <InlineChip label="Tap + hold thrust" />
+            <InlineChip label="Moon tunnel" />
             <InlineChip label="No saves" />
             <InlineChip label="30-level run" />
           </View>
@@ -71,10 +73,10 @@ export function HomeScreen() {
           <Text style={styles.notesTitle}>Prototype Status</Text>
           <Text style={styles.notesText}>
             Gameplay, level flow, crash rules, and camera behavior are live.
-            The source rocket and launchpad models are in the repo now, along
-            with converted GLB versions. Native gameplay now renders those
-            models in the flight view. Web keeps the clean 2D stand-ins so the
-            browser path stays lightweight and stable.
+            The current target is a retro lunar run with chunky pixel-style UI,
+            moon-tunnel silhouettes, and phone-tilt flight. Native gameplay
+            renders the rocket and launchpad models while web keeps the lighter
+            2D fallback path.
           </Text>
           <Text style={styles.notesMeta}>
             Expected source files: Rocket.obj, Rocket.mtl, Launchpad.obj,
@@ -103,7 +105,7 @@ export function HomeScreen() {
           <FeatureChip
             compact={isCompact}
             label="Camera"
-            value="Zooms out for sightlines and in for precision"
+            value="Dynamic pan, zoom, and look-ahead"
             wide={isWide}
           />
           <FeatureChip
@@ -138,11 +140,11 @@ export function HomeScreen() {
 
         <View style={[styles.buttonStack, isWide && styles.bottomPanel]}>
           <GameButton
-            label="Start Run"
+            label="Start Launch3001"
             onPress={() => {
               navigate("/game" as Href, "confirm");
             }}
-            subtitle="Enter level 1 immediately"
+            subtitle="Enter Launch3001 immediately"
             tone="primary"
           />
           <GameButton
@@ -150,7 +152,7 @@ export function HomeScreen() {
             onPress={() => {
               navigate("/launcher" as Href);
             }}
-            subtitle="Read the mission ramp, asset note, and run structure"
+            subtitle="Read the mission ramp, lunar vibe, and run structure"
           />
           <GameButton
             label="How To Play"
@@ -240,7 +242,7 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.card,
     borderColor: theme.colors.border,
     borderRadius: theme.radius.xl,
-    borderWidth: 1,
+    borderWidth: 2,
     gap: theme.spacing.md,
     padding: theme.spacing.xl
   },
@@ -274,7 +276,7 @@ const styles = StyleSheet.create({
   },
   inlineChip: {
     backgroundColor: "rgba(56, 189, 248, 0.12)",
-    borderRadius: 999,
+    borderRadius: 8,
     paddingHorizontal: theme.spacing.md,
     paddingVertical: 8
   },
@@ -291,6 +293,8 @@ const styles = StyleSheet.create({
   featureChip: {
     backgroundColor: theme.colors.cardMuted,
     borderRadius: theme.radius.lg,
+    borderColor: theme.colors.border,
+    borderWidth: 1,
     gap: 6,
     minWidth: "47%",
     padding: theme.spacing.md
@@ -319,6 +323,8 @@ const styles = StyleSheet.create({
   notesCard: {
     backgroundColor: theme.colors.cardMuted,
     borderRadius: theme.radius.xl,
+    borderColor: theme.colors.border,
+    borderWidth: 1,
     gap: theme.spacing.md,
     padding: theme.spacing.lg
   },

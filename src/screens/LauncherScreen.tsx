@@ -9,18 +9,18 @@ export function LauncherScreen() {
   return (
     <ScreenContainer scroll contentContainerStyle={styles.content}>
       <View style={styles.heroCard}>
-        <Text style={styles.kicker}>Launch Bay</Text>
-        <Text style={styles.title}>Run structure and asset handoff.</Text>
+        <Text style={styles.kicker}>Launch3001 Bay</Text>
+        <Text style={styles.title}>Moon-tunnel run structure and asset handoff.</Text>
         <Text style={styles.description}>
-          Launch is built as a single-run arcade game. Clear each stage in
-          sequence, survive all 30 levels without saves, and fail once to reset
-          the run back to level 1.
+          Launch3001 is built as a single-run arcade game. Clear each stage in
+          sequence, survive all 30 sectors without saves, and fail once to
+          reset the run back to level 1.
         </Text>
       </View>
 
       <View style={styles.grid}>
         <InfoCard
-          body="Level 1 starts from a left-side launch deck. Every stage finishes on a dedicated landing pad. Difficulty rises through tighter gaps, longer routes, more hangar blockers, and narrower landing windows."
+          body="Level 1 starts from a left-side launch deck. Every stage finishes on a dedicated landing pad. Difficulty rises through tighter gaps, longer routes, more hangar blockers, moon-tunnel pressure, and narrower landing windows."
           title="Mission Flow"
         />
         <InfoCard
@@ -39,11 +39,11 @@ export function LauncherScreen() {
 
       <View style={styles.actions}>
         <GameButton
-          label="Start Run"
+          label="Start Launch3001"
           onPress={() => {
             router.push("/game" as Href);
           }}
-          subtitle="Jump straight into level 1"
+          subtitle="Jump straight into sector 1"
           tone="primary"
         />
         <GameButton
@@ -80,7 +80,7 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.card,
     borderColor: theme.colors.border,
     borderRadius: theme.radius.xl,
-    borderWidth: 1,
+    borderWidth: 2,
     gap: theme.spacing.md,
     padding: theme.spacing.xl
   },
@@ -111,7 +111,7 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.cardMuted,
     borderColor: theme.colors.border,
     borderRadius: theme.radius.xl,
-    borderWidth: 1,
+    borderWidth: 2,
     flexGrow: 1,
     gap: theme.spacing.sm,
     minWidth: 280,
